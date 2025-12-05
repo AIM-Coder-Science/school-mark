@@ -6,26 +6,35 @@ import ProtectedRoute from './components/ProtectedRoute'
 // Pages
 import Login from './pages/Login'
 import StudentDashboard from './pages/student/Dashboard'
+import StudentReportCard from './pages/student/ReportCard'
+import StudentNews from './pages/student/News'
+
 import TeacherDashboard from './pages/teacher/Dashboard'
+import TeacherClasses from './pages/teacher/Classes'
+import TeacherAppreciation from './pages/teacher/Appreciation'
+import TeacherNews from './pages/teacher/News'
+
 import AdminDashboard from './pages/admin/Dashboard'
 import AdminTeachers from './pages/admin/Teachers'
 import AdminStudents from './pages/admin/Students'
 import AdminClasses from './pages/admin/Classes'
 import AdminSubjects from './pages/admin/Subjects'
 import AdminNews from './pages/admin/News'
+import AdminBulletins from './pages/admin/Bulletins'
+
 import Layout from './components/Layout'
 import Unauthorized from './pages/Unauthorized'
-import StudentNews from './pages/student/News'
-import TeacherNews from './pages/teacher/News'
 
 function App() {
-  const { isAuthenticated, user, loading } = useAuth() // 🛑 Ajout de 'loading' pour plus de robustesse
+  const { isAuthenticated, user, loading } = useAuth()
 
-  // Afficher un écran de chargement global pendant la vérification initiale du token
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <p>Chargement de l'application...</p>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Chargement de l'application...</p>
+        </div>
       </div>
     )
   }
@@ -33,53 +42,63 @@ function App() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Routes>
-        {/* Routes publiques - SEULEMENT login */}
+        {/* Routes publiques */}
         <Route 
           path="/login" 
-          element={
-            // Si authentifié, rediriger vers la racine (qui gérera la redirection par rôle)
-            !isAuthenticated ? <Login /> : <Navigate to="/" replace />
-          } 
+          element={!isAuthenticated ? <Login /> : <Navigate to="/" replace />} 
         />
         
         {/* Routes protégées */}
         <Route path="/" element={
-          // Le ProtectedRoute vérifie si l'utilisateur est authentifié
           <ProtectedRoute>
             <Layout />
           </ProtectedRoute>
         }>
-          {/* Redirection selon le rôle (Route index) */}
+          {/* Redirection selon le rôle */}
           <Route 
             index 
             element={
-              // 🛑 CORRECTION: S'assurer que le rôle est défini avant de rediriger
               user?.role 
                 ? <Navigate to={`/${user.role}/dashboard`} replace /> 
-                // Optionnel: si l'utilisateur est authentifié mais le rôle n'est pas encore là (très rare après la correction), on affiche un chargement
-                : isAuthenticated 
-                  ? <div className="p-4 text-center">Préparation du tableau de bord...</div> 
-                  : <Navigate to="/login" replace /> 
+                : <Navigate to="/login" replace /> 
             } 
           />
           
-          {/* Routes étudiant */}
+          {/* ============== ROUTES ÉTUDIANT ============== */}
           <Route path="student/dashboard" element={
             <ProtectedRoute requiredRole="student">
               <StudentDashboard />
             </ProtectedRoute>
           } />
+          
+          <Route path="student/report-card" element={
+            <ProtectedRoute requiredRole="student">
+              <StudentReportCard />
+            </ProtectedRoute>
+          } />
 
-          <Route path="teacher/news" element={
+          <Route path="student/news" element={
             <ProtectedRoute requiredRole="student">
               <StudentNews />
             </ProtectedRoute>
-            } />
+          } />
           
-          {/* Routes enseignant */}
+          {/* ============== ROUTES ENSEIGNANT ============== */}
           <Route path="teacher/dashboard" element={
             <ProtectedRoute requiredRole="teacher">
               <TeacherDashboard />
+            </ProtectedRoute>
+          } />
+
+          <Route path="teacher/classes" element={
+            <ProtectedRoute requiredRole="teacher">
+              <TeacherClasses />
+            </ProtectedRoute>
+          } />
+
+          <Route path="teacher/appreciation" element={
+            <ProtectedRoute requiredRole="teacher">
+              <TeacherAppreciation />
             </ProtectedRoute>
           } />
 
@@ -87,37 +106,48 @@ function App() {
             <ProtectedRoute requiredRole="teacher">
               <TeacherNews />
             </ProtectedRoute>
-            } />
+          } />
 
-          {/* Routes admin */}
+          {/* ============== ROUTES ADMIN ============== */}
           <Route path="admin/dashboard" element={
             <ProtectedRoute requiredRole="admin">
               <AdminDashboard />
             </ProtectedRoute>
           } />
+          
           <Route path="admin/teachers" element={
             <ProtectedRoute requiredRole="admin">
               <AdminTeachers />
             </ProtectedRoute>
           } />
+          
           <Route path="admin/students" element={
             <ProtectedRoute requiredRole="admin">
               <AdminStudents />
             </ProtectedRoute>
           } />
+          
           <Route path="admin/classes" element={
             <ProtectedRoute requiredRole="admin">
               <AdminClasses />
             </ProtectedRoute>
           } />
+          
           <Route path="admin/subjects" element={
             <ProtectedRoute requiredRole="admin">
               <AdminSubjects />
             </ProtectedRoute>
           } />
+          
           <Route path="admin/news" element={
             <ProtectedRoute requiredRole="admin">
               <AdminNews />
+            </ProtectedRoute>
+          } />
+
+          <Route path="admin/bulletins" element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminBulletins />
             </ProtectedRoute>
           } />
         </Route>
@@ -125,7 +155,7 @@ function App() {
         {/* Route non autorisée */}
         <Route path="/unauthorized" element={<Unauthorized />} />
         
-        {/* Route 404 (redirige vers la racine) */}
+        {/* Route 404 */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </div>

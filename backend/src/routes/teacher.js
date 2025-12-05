@@ -30,4 +30,10 @@ router.get('/classes/:classId/main-teacher', canAccessClass, isMainTeacher, getM
 router.post('/appreciations', createAppreciation);
 router.get('/classes/:classId/appreciations', canAccessClass, isMainTeacher, getClassAppreciations);
 
+// Récupérer les matières d'une classe
+router.get('/classes/:classId/subjects', teacherController.getClassSubjects)
+
+// Dashboard prof principal
+router.get('/classes/:classId/main-teacher', getMainTeacherDashboard)
+
 module.exports = router;

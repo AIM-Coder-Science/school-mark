@@ -7,7 +7,9 @@ import {
   BookOpen, 
   FileText, 
   Bell,
-  GraduationCap
+  GraduationCap,
+  Award,
+  ClipboardCheck
 } from 'lucide-react'
 
 const Sidebar = () => {
@@ -20,17 +22,19 @@ const Sidebar = () => {
     { to: '/admin/classes', icon: BookOpen, label: 'Classes' },
     { to: '/admin/subjects', icon: FileText, label: 'Matières' },
     { to: '/admin/news', icon: Bell, label: 'Actualités' },
+    { to: '/admin/bulletins', icon: ClipboardCheck, label: 'Bulletins' },
   ]
 
   const teacherLinks = [
     { to: '/teacher/dashboard', icon: LayoutDashboard, label: 'Tableau de bord' },
-    { to: '/teacher/classes', icon: BookOpen, label: 'Mes classes' },
-  { to: '/teacher/news', icon: Bell, label: 'Actualités' }, // CHANGÉ
+    { to: '/teacher/classes', icon: BookOpen, label: 'Apprenants' },
+    { to: '/teacher/appreciation', icon: Award, label: 'Appréciations' },
+    { to: '/teacher/news', icon: Bell, label: 'Actualités' },
   ]
 
   const studentLinks = [
     { to: '/student/dashboard', icon: LayoutDashboard, label: 'Tableau de bord' },
-    { to: '/student/report-card', icon: FileText, label: 'Bulletin' },
+    { to: '/student/report-card', icon: FileText, label: 'Bulletins' },
     { to: '/student/news', icon: Bell, label: 'Actualités' },
   ]
 

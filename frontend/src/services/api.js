@@ -112,6 +112,8 @@ export const utilsAPI = {
     api.get(`/utils/students/${studentId}/report-card/${semester}`),
   getGeneralAverage: (studentId, semester) =>
     api.get(`/utils/students/${studentId}/general-average/${semester || ''}`),
+  signBulletin: (studentId, semester) => 
+    api.post(`/utils/students/${studentId}/sign-bulletin/${semester}`),
 }
 
 // Services notes
