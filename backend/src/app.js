@@ -25,7 +25,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Commenter helmet et morgan s'ils ne sont pas installés
 // app.use(helmet());
 // app.use(morgan('dev'));
 

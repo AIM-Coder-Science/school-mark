@@ -27,7 +27,15 @@ const User = sequelize.define('User', {
   is_active: {
     type: DataTypes.BOOLEAN,
     defaultValue: true
-  }
+  },
+  first_name: {  // AJOUTEZ CETTE LIGNE
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    last_name: {   // AJOUTEZ CETTE LIGNE
+      type: DataTypes.STRING,
+      allowNull: true
+    }
 }, {
   tableName: 'users',
   timestamps: true,

@@ -3,61 +3,93 @@ const { User, Student, Teacher, Class, Subject, TeacherClassSubject, AcademicYea
 // Statistiques admin
 const getAdminDashboard = async (req, res) => {
   try {
-    const [
-      studentsCount,
-      teachersCount,
-      classesCount,
-      subjectsCount
-    ] = await Promise.all([
-      Student.count(),
-      Teacher.count(),
-      Class.count(),
-      Subject.count()
-    ]);
-
-    // Dernières inscriptions - AVEC LES ALIAS
-    const recentStudents = await Student.findAll({
-      limit: 5,
-      order: [['createdAt', 'DESC']],
-      include: [
-        { 
-          model: Class,
-          as: 'Class'  // <-- AJOUTE CETTE LIGNE
-        }
-      ]
+    console.log('📊 Dashboard admin - Début');
+    
+    // Compter les utilisateurs par rôle
+    const userCounts = await User.findAll({
+      attributes: ['role', [sequelize.fn('COUNT', sequelize.col('id')), 'count']],
+      group: ['role'],
+      raw: true
     });
 
-    const recentTeachers = await Teacher.findAll({
-      limit: 5,
-      order: [['createdAt', 'DESC']],
-      include: [
-        { 
-          model: User, 
-          as: 'User',  // <-- AJOUTE CETTE LIGNE
-          attributes: ['email'] 
-        }
-      ]
+    // Compter les étudiants actifs
+    const activeStudentsCount = await Student.count({
+      include: [{
+        model: User,
+        where: { is_active: true },
+        attributes: []
+      }]
     });
 
-    res.json({
+    // Compter les enseignants actifs
+    const activeTeachersCount = await Teacher.count({
+      include: [{
+        model: User,
+        where: { is_active: true },
+        attributes: []
+      }]
+    });
+
+    // Compter les classes
+    const classesCount = await Class.count();
+    
+    // Compter les matières
+    const subjectsCount = await Subject.count();
+
+    // Dernières actualités
+    const recentNews = await News.findAll({
+      limit: 5,
+      order: [['createdAt', 'DESC']],
+      include: [{
+        model: User,
+        as: 'author',
+        attributes: ['email']
+      }]
+    });
+
+    // Statistiques des utilisateurs
+    const totalUsers = await User.count();
+    const activeUsers = await User.count({ where: { is_active: true } });
+    const inactiveUsers = await User.count({ where: { is_active: false } });
+
+    const response = {
       success: true,
-      dashboard: {
-        statistics: {
-          studentsCount,
-          teachersCount,
-          classesCount,
-          subjectsCount,
-          currentYear: '2023-2024'
+      data: {
+        counts: {
+          students: activeStudentsCount,
+          teachers: activeTeachersCount,
+          classes: classesCount,
+          subjects: subjectsCount,
+          totalUsers,
+          activeUsers,
+          inactiveUsers
         },
-        recentStudents,
-        recentTeachers
+        userStats: userCounts,
+        recentNews: recentNews.map(news => ({
+          id: news.id,
+          title: news.title,
+          author: news.author?.email || 'Inconnu',
+          createdAt: news.createdAt
+        })),
+        summary: {
+          totalActiveAccounts: activeStudentsCount + activeTeachersCount,
+          systemStatus: 'Opérationnel'
+        }
       }
+    };
+
+    console.log('✅ Dashboard admin généré:', {
+      students: activeStudentsCount,
+      teachers: activeTeachersCount,
+      classes: classesCount
     });
+
+    res.json(response);
   } catch (error) {
-    console.error('Erreur dashboard admin:', error);
+    console.error('❌ Erreur dashboard admin:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur lors de la récupération du tableau de bord: ' + error.message,
+      message: 'Erreur lors de la récupération du dashboard admin.',
       error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
@@ -296,56 +328,87 @@ const createSubject = async (req, res) => {
 };
 
 // Obtenir toutes les données
+// src/controllers/adminController.js - getAllData
 const getAllData = async (req, res) => {
   try {
-    const [teachers, students, classes, subjects] = await Promise.all([
-      Teacher.findAll({ 
-        include: [
-          { 
-            model: User, 
-            as: 'User',  // <-- AJOUTE CETTE LIGNE
-            attributes: ['email', 'is_active'] 
-          }
-        ] 
+    console.log('📦 Récupération de toutes les données admin');
+    
+    // Récupérer tout en parallèle
+    const [
+      users,
+      students,
+      teachers,
+      classes,
+      subjects
+    ] = await Promise.all([
+      User.findAll({
+        attributes: ['id', 'email', 'role', 'is_active', 'createdAt'],
+        order: [['createdAt', 'DESC']]
       }),
-      Student.findAll({ 
+      Student.findAll({
         include: [
-          { 
-            model: Class,
-            as: 'Class'  // <-- AJOUTE CETTE LIGNE
-          }, 
-          { 
-            model: User, 
-            as: 'User',  // <-- AJOUTE CETTE LIGNE
-            attributes: ['email', 'is_active'] 
-          }
-        ] 
+          { model: User, attributes: ['email', 'is_active'] },
+          { model: Class, attributes: ['name', 'level'] }
+        ],
+        order: [['createdAt', 'DESC']]
       }),
-      Class.findAll({ 
+      Teacher.findAll({
+        include: [
+          { model: User, attributes: ['email', 'is_active'] }
+        ],
+        order: [['createdAt', 'DESC']]
+      }),
+      Class.findAll({
         include: [
           { 
             model: Teacher, 
-            as: 'mainTeacher' 
+            as: 'mainTeacher',
+            attributes: ['first_name', 'last_name']
+          },
+          {
+            model: Student,
+            attributes: ['id']
           }
-        ] 
+        ],
+        order: [['name', 'ASC']]
       }),
-      Subject.findAll()
+      Subject.findAll({
+        order: [['name', 'ASC']]
+      })
     ]);
 
-    res.json({
+    const response = {
       success: true,
       data: {
-        teachers,
-        students,
-        classes,
-        subjects
+        users: users.map(u => u.toJSON()),
+        students: students.map(s => s.toJSON()),
+        teachers: teachers.map(t => t.toJSON()),
+        classes: classes.map(c => {
+          const classData = c.toJSON();
+          return {
+            ...classData,
+            studentCount: classData.Students ? classData.Students.length : 0
+          };
+        }),
+        subjects: subjects.map(s => s.toJSON())
+      },
+      counts: {
+        totalUsers: users.length,
+        totalStudents: students.length,
+        totalTeachers: teachers.length,
+        totalClasses: classes.length,
+        totalSubjects: subjects.length
       }
-    });
+    };
+
+    console.log('✅ Toutes les données récupérées:', response.counts);
+    res.json(response);
   } catch (error) {
-    console.error('Erreur récupération données:', error);
+    console.error('❌ Erreur récupération données admin:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur lors de la récupération des données: ' + error.message
+      message: 'Erreur lors de la récupération des données.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
   }
 };

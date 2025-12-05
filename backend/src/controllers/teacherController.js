@@ -468,6 +468,22 @@ const getMainTeacherDashboard = async (req, res) => {
   }
 };
 
+const getClassStudents = async (req, res) => {
+  try {
+    const { classId } = req.params;
+    res.json({
+      success: true,
+      message: `Étudiants de la classe ${classId}`,
+      students: []
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: 'Erreur récupération étudiants'
+    });
+  }
+};
+
 // Test des associations (pour debugging)
 const testAssociations = async (req, res) => {
   try {
@@ -527,10 +543,62 @@ const testAssociations = async (req, res) => {
   }
 };
 
+// Dans teacherController.js
+const getMyStudents = async (req, res) => {
+  try {
+    const teacherId = req.user.teacherId;
+    
+    console.log(`🎓 Récupération étudiants pour enseignant principal ${teacherId}`);
+    
+    // Trouver les classes où l'enseignant est principal
+    const mainTeacherClasses = await Class.findAll({
+      where: { main_teacher_id: teacherId },
+      attributes: ['id']
+    });
+
+    const classIds = mainTeacherClasses.map(c => c.id);
+
+    if (classIds.length === 0) {
+      return res.json({
+        success: true,
+        message: 'Vous n\'êtes pas professeur principal d\'aucune classe.',
+        students: []
+      });
+    }
+
+    // Récupérer les étudiants de ces classes
+    const students = await Student.findAll({
+      where: { class_id: classIds },
+      include: [
+        { model: Class, attributes: ['name', 'level'] },
+        { model: User, attributes: ['email', 'is_active'] }
+      ],
+      order: [['last_name', 'ASC'], ['first_name', 'ASC']]
+    });
+
+    console.log(`✅ ${students.length} étudiants trouvés pour enseignant ${teacherId}`);
+
+    res.json({
+      success: true,
+      students,
+      classCount: classIds.length,
+      studentCount: students.length
+    });
+  } catch (error) {
+    console.error('❌ Erreur récupération étudiants:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des étudiants'
+    });
+  }
+};
+
 module.exports = {
   getTeacherDashboard,
   getAssignedClasses,
   getSubjectsByClass,
   getMainTeacherDashboard,
+  getClassStudents,
+  getMyStudents,
   testAssociations  // Pour debugging
 };

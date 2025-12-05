@@ -90,49 +90,27 @@ const createNews = async (req, res) => {
 };
 
 // Obtenir les actualités selon le rôle - VERSION OPTIMISÉE
+// Dans newsController.js - getNews
 const getNews = async (req, res) => {
   try {
     const userRole = req.user.role;
-    const { page = 1, limit = 20 } = req.query;
+    console.log('📰 Récupération actualités pour rôle:', userRole);
+    console.log('👤 Utilisateur:', req.user.id, req.user.email);
 
+    const { page = 1, limit = 20 } = req.query;
     const offset = (page - 1) * limit;
 
-    // Déterminer si on utilise MySQL
-    const isMySQL = process.env.DB_DIALECT === 'mysql';
-    let whereClause = { is_published: true };
-
-    if (isMySQL) {
-      // Version MySQL optimisée
-      whereClause[Op.or] = [
-        // Pour les rôles spécifiques
-        sequelize.where(
-          sequelize.fn('JSON_CONTAINS', sequelize.col('target_roles'), JSON.stringify(userRole)),
-          true
-        ),
-        // Pour "all"
-        sequelize.where(
-          sequelize.fn('JSON_CONTAINS', sequelize.col('target_roles'), JSON.stringify('all')),
-          true
-        ),
-        // Pour toutes les cibles
-        { target_roles: { [Op.like]: '%admin%teacher%student%' } }
-      ];
-    } else {
-      // Version PostgreSQL/SQLite
-      whereClause[Op.or] = [
+    // Condition simplifiée
+    const whereClause = { 
+      is_published: true,
+      [Op.or]: [
         { target_roles: { [Op.contains]: [userRole] } },
-        { target_roles: { [Op.contains]: ['all'] } },
-        { 
-          [Op.and]: [
-            { target_roles: { [Op.contains]: ['admin'] } },
-            { target_roles: { [Op.contains]: ['teacher'] } },
-            { target_roles: { [Op.contains]: ['student'] } }
-          ]
-        }
-      ];
-    }
+        { target_roles: { [Op.contains]: ['all'] } }
+      ]
+    };
 
-    // Récupérer les actualités avec pagination
+    console.log('🔍 Where clause:', JSON.stringify(whereClause));
+
     const { count, rows: newsItems } = await News.findAndCountAll({
       where: whereClause,
       include: [{
@@ -143,13 +121,13 @@ const getNews = async (req, res) => {
           { 
             model: Teacher, 
             as: 'Teacher',
-            attributes: ['first_name', 'last_name', 'id'], 
+            attributes: ['first_name', 'last_name'], 
             required: false 
           },
           { 
             model: Student, 
             as: 'Student',
-            attributes: ['first_name', 'last_name', 'matricule'], 
+            attributes: ['first_name', 'last_name'], 
             required: false 
           }
         ]
@@ -159,6 +137,8 @@ const getNews = async (req, res) => {
       offset: parseInt(offset),
       distinct: true
     });
+
+    console.log(`✅ ${newsItems.length} actualités trouvées pour ${userRole}`);
 
     // Formater les actualités pour l'affichage
     const formattedNews = newsItems.map(item => {

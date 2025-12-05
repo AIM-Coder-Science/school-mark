@@ -17,55 +17,56 @@ const getStudentDashboard = async (req, res) => {
     const studentId = req.user.Student.id;
     
     // Trouver l'étudiant avec ses relations - AVEC LES BONS ALIAS
-    const student = await Student.findByPk(studentId, {
+    // Dans studentController.js - getStudentDashboard
+const student = await Student.findByPk(studentId, {
+  include: [
+    { 
+      model: Class,
+      as: 'Class',  // Vérifiez que cet alias est correct
+      attributes: ['id', 'name', 'level']
+    },
+    {
+      model: Grade,
+      as: 'Grades',  // Vérifiez cet alias
       include: [
         { 
-          model: Class,
-          as: 'Class',  // CORRECT: alias défini dans index.js
-          attributes: ['id', 'name', 'level']
+          model: Subject,
+          as: 'Subject',  // Vérifiez cet alias
+          attributes: ['id', 'name', 'coefficient']
         },
-        {
-          model: Grade,
-          as: 'Grades',  // CORRECT: alias défini dans index.js
-          include: [
-            { 
-              model: Subject,
-              as: 'Subject',  // CORRECT: alias défini dans index.js
-              attributes: ['id', 'name', 'coefficient']
-            },
-            { 
-              model: Teacher, 
-              as: 'Teacher',  // CORRECT: alias défini dans index.js
-              include: [{
-                model: User,
-                as: 'User',  // CORRECT: alias défini dans index.js
-                attributes: ['email']
-              }]
-            }
-          ]
-        },
-        {
-          model: Appreciation,
-          as: 'Appreciations',  // CORRECT: alias défini dans index.js
-          include: [
-            { 
-              model: Teacher, 
-              as: 'Teacher',  // CORRECT: alias défini dans index.js
-              include: [{
-                model: User,
-                as: 'User',  // CORRECT: alias défini dans index.js
-                attributes: ['email']
-              }]
-            },
-            { 
-              model: Subject,
-              as: 'Subject',  // CORRECT: alias défini dans index.js
-              attributes: ['name']
-            }
-          ]
+        { 
+          model: Teacher, 
+          as: 'Teacher',  // Vérifiez cet alias
+          include: [{
+            model: User,
+            as: 'User',
+            attributes: ['email']
+          }]
         }
       ]
-    });
+    },
+    {
+      model: Appreciation,
+      as: 'Appreciations',  // Vérifiez cet alias
+      include: [
+        { 
+          model: Teacher, 
+          as: 'Teacher',
+          include: [{
+            model: User,
+            as: 'User',
+            attributes: ['email']
+          }]
+        },
+        { 
+          model: Subject,
+          as: 'Subject',
+          attributes: ['name']
+        }
+      ]
+    }
+  ]
+});
 
     if (!student) {
       console.log('❌ Étudiant non trouvé pour ID:', studentId);
@@ -275,7 +276,89 @@ const getReportCard = async (req, res) => {
   }
 };
 
+const getStudentProfile = async (req, res) => {
+  try {
+    console.log('👤 Récupération profil étudiant pour user:', req.user.id);
+    
+    // Vérifier que l'utilisateur a un profil étudiant
+    if (!req.user.Student && !req.user.studentId) {
+      console.log('❌ Aucun profil étudiant trouvé pour user:', req.user.id);
+      return res.status(403).json({
+        success: false,
+        message: 'Profil étudiant non trouvé ou non autorisé.'
+      });
+    }
+
+    const studentId = req.user.studentId || req.user.Student?.id;
+    
+    // Trouver l'étudiant avec ses relations
+    const student = await Student.findByPk(studentId, {
+      include: [
+        { 
+          model: Class,
+          as: 'Class',
+          attributes: ['id', 'name', 'level']
+        },
+        {
+          model: User,
+          as: 'User',
+          attributes: ['id', 'email', 'role', 'is_active', 'createdAt']
+        }
+      ]
+    });
+
+    if (!student) {
+      console.log('❌ Étudiant non trouvé pour ID:', studentId);
+      return res.status(404).json({
+        success: false,
+        message: 'Profil étudiant non trouvé.'
+      });
+    }
+
+    console.log('✅ Profil étudiant trouvé:', student.first_name, student.last_name);
+
+    // Formater la réponse
+    const response = {
+      success: true,
+      profile: {
+        id: student.id,
+        first_name: student.first_name,
+        last_name: student.last_name,
+        matricule: student.matricule,
+        date_of_birth: student.date_of_birth,
+        place_of_birth: student.place_of_birth,
+        gender: student.gender,
+        address: student.address,
+        phone: student.phone,
+        email: student.User?.email,
+        class: student.Class,
+        user_account: {
+          id: student.User?.id,
+          email: student.User?.email,
+          role: student.User?.role,
+          is_active: student.User?.is_active,
+          created_at: student.User?.createdAt
+        },
+        createdAt: student.createdAt,
+        updatedAt: student.updatedAt
+      }
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error('❌ Erreur récupération profil étudiant:', error.message);
+    console.error('Stack:', error.stack);
+    
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération du profil étudiant.',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 module.exports = {
   getStudentDashboard,
-  getReportCard
+  getReportCard,
+  getStudentProfile
 };

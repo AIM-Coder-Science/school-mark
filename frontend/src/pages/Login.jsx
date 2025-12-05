@@ -97,7 +97,6 @@ const Login = () => {
             </button>
           </div>
           
-          {/* SUPPRIMER le lien d'inscription */}
         </form>
       </div>
     </div>
