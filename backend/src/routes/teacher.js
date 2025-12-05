@@ -1,3 +1,4 @@
+// backend/src/routes/teacher.js
 const express = require('express');
 const router = express.Router();
 const { 
@@ -21,19 +22,15 @@ router.get('/classes', getAssignedClasses);
 // Gestion des notes
 router.post('/classes/:classId/grades', canAccessClass, createGrade);
 router.get('/classes/:classId/grades', canAccessClass, getClassGrades);
+
+// ✅ CORRECTION : Route pour récupérer les matières d'une classe
 router.get('/classes/:classId/subjects', canAccessClass, getSubjectsByClass);
 
-// Dashboard prof principal
+// ✅ CORRECTION : Dashboard prof principal
 router.get('/classes/:classId/main-teacher', canAccessClass, isMainTeacher, getMainTeacherDashboard);
 
 // Appréciations (prof principal)
 router.post('/appreciations', createAppreciation);
 router.get('/classes/:classId/appreciations', canAccessClass, isMainTeacher, getClassAppreciations);
-
-// Récupérer les matières d'une classe
-router.get('/classes/:classId/subjects', teacherController.getClassSubjects)
-
-// Dashboard prof principal
-router.get('/classes/:classId/main-teacher', getMainTeacherDashboard)
 
 module.exports = router;

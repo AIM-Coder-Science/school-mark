@@ -54,22 +54,8 @@ app.use('/api/student', studentRoutes);
 app.use('/api/teacher', teacherRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/news', newsRoutes);
-// Supprime cette ligne si tu n'as pas classRoutes
-// app.use('/api/classes', classRoutes);
 
-// **CORRECTION : Route 404 pour API - Version corrigée**
-// Option 1 : Utiliser une route catch-all avec regex
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api/')) {
-    return res.status(404).json({
-      success: false,
-      message: `Route API non trouvée: ${req.method} ${req.originalUrl}`
-    });
-  }
-  next();
-});
 
-// Option 2 : Gérer toutes les routes non trouvées
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {
     return res.status(404).json({
