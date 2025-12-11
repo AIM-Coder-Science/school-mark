@@ -1,3 +1,4 @@
+// backend/src/middleware/auth.js
 const jwt = require('jsonwebtoken');
 const { User, Student, Teacher } = require('../models');
 
@@ -6,7 +7,6 @@ const auth = async (req, res, next) => {
   try {
     console.log('🔐 Auth middleware - Début');
 
-    // Récupérer le token depuis le header Authorization
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({
@@ -16,9 +16,8 @@ const auth = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    console.log('📝 Token reçu:', token.substring(0, 20) + '...');
+    console.log('📝 Token reçu');
 
-    // Vérifier et décoder le token
     let decoded;
     try {
       decoded = jwt.verify(token, process.env.JWT_SECRET || 'votre_secret_jwt_par_defaut');
@@ -58,7 +57,6 @@ const auth = async (req, res, next) => {
       });
     }
 
-    // Vérifier si l'utilisateur est actif
     if (!user.is_active) {
       console.log('❌ Utilisateur désactivé:', user.email);
       return res.status(403).json({
@@ -71,39 +69,44 @@ const auth = async (req, res, next) => {
       id: user.id,
       email: user.email,
       role: user.role,
-      is_active: user.is_active,
       hasStudent: !!user.Student,
       hasTeacher: !!user.Teacher
     });
 
-    // Préparer les données de l'utilisateur pour le reste de l'application
+    // ✅ CORRECTION MAJEURE : Inclure le profil complet dans req.user
     req.user = {
       id: user.id,
       email: user.email,
       role: user.role,
       is_active: user.is_active,
-      // Ajouter les infos spécifiques selon le rôle
-      ...(user.role === 'student' && user.Student && {
-        studentId: user.Student.id,
-        firstName: user.Student.first_name,
-        lastName: user.Student.last_name,
-        matricule: user.Student.matricule,
-        classId: user.Student.class_id
-      }),
-      ...(user.role === 'teacher' && user.Teacher && {
-        teacherId: user.Teacher.id,
-        firstName: user.Teacher.first_name,
-        lastName: user.Teacher.last_name,
-        specialty: user.Teacher.specialty,
-        phone: user.Teacher.phone
-      })
+      Student: user.Student || null,  // ✅ AJOUT COMPLET
+      Teacher: user.Teacher || null   // ✅ AJOUT COMPLET
     };
+
+    // Ajouter les IDs rapides
+    if (user.role === 'student' && user.Student) {
+      req.user.studentId = user.Student.id;
+      req.user.firstName = user.Student.first_name;
+      req.user.lastName = user.Student.last_name;
+      req.user.matricule = user.Student.matricule;
+      req.user.classId = user.Student.class_id;
+    }
+
+    if (user.role === 'teacher' && user.Teacher) {
+      req.user.teacherId = user.Teacher.id;
+      req.user.firstName = user.Teacher.first_name;
+      req.user.lastName = user.Teacher.last_name;
+      req.user.specialty = user.Teacher.specialty;
+      req.user.phone = user.Teacher.phone;
+    }
 
     console.log('✅ Auth middleware - Succès:', {
       userId: req.user.id,
       role: req.user.role,
       studentId: req.user.studentId || 'N/A',
-      teacherId: req.user.teacherId || 'N/A'
+      teacherId: req.user.teacherId || 'N/A',
+      hasStudentProfile: !!req.user.Student,
+      hasTeacherProfile: !!req.user.Teacher
     });
 
     next();
@@ -158,10 +161,9 @@ const studentAccessControl = (req, res, next) => {
     console.log('🎓 Student access control - Début');
 
     if (req.user.role !== 'student') {
-      return next(); // Passer au middleware suivant si ce n'est pas un étudiant
+      return next();
     }
 
-    // Vérifier que l'étudiant a un profil complet
     if (!req.user.studentId) {
       console.log('❌ Étudiant sans profil complet:', req.user.email);
       return res.status(403).json({
@@ -170,10 +172,8 @@ const studentAccessControl = (req, res, next) => {
       });
     }
 
-    // Vérifier que l'étudiant est dans une classe
     if (!req.user.classId) {
       console.log('⚠️ Étudiant sans classe assignée:', req.user.email);
-      // On peut permettre l'accès mais afficher un avertissement
       req.user.hasNoClass = true;
     }
 
@@ -197,7 +197,6 @@ const teacherAccessControl = (req, res, next) => {
       return next();
     }
 
-    // Vérifier que l'enseignant a un profil complet
     if (!req.user.teacherId) {
       console.log('❌ Enseignant sans profil complet:', req.user.email);
       return res.status(403).json({
@@ -217,13 +216,12 @@ const teacherAccessControl = (req, res, next) => {
   }
 };
 
-// Middleware pour vérifier la propriété (un utilisateur ne peut modifier que ses propres données)
+// Middleware pour vérifier la propriété
 const isOwnerOrAdmin = (modelName, paramName = 'id') => {
   return async (req, res, next) => {
     try {
       console.log('👑 Ownership check - Début');
 
-      // Les admins peuvent tout faire
       if (req.user.role === 'admin') {
         console.log('✅ Admin - accès autorisé');
         return next();
@@ -240,10 +238,8 @@ const isOwnerOrAdmin = (modelName, paramName = 'id') => {
         userRole
       });
 
-      // Logique spécifique selon le modèle
       switch (modelName) {
         case 'User':
-          // Un utilisateur ne peut modifier que son propre profil
           if (parseInt(resourceId) === userId) {
             console.log('✅ Propriétaire du profil - accès autorisé');
             return next();
@@ -251,24 +247,18 @@ const isOwnerOrAdmin = (modelName, paramName = 'id') => {
           break;
 
         case 'Student':
-          // Un étudiant ne peut accéder qu'à son propre profil
           if (userRole === 'student' && req.user.studentId === parseInt(resourceId)) {
             console.log('✅ Étudiant propriétaire - accès autorisé');
             return next();
           }
-          // Un enseignant peut voir les étudiants de ses classes
           if (userRole === 'teacher') {
-            // Ici, vous devriez vérifier si l'étudiant est dans une classe de l'enseignant
-            // Pour simplifier, on autorise temporairement
             console.log('✅ Enseignant - accès temporairement autorisé');
             return next();
           }
           break;
 
         case 'News':
-          // Les auteurs peuvent modifier leurs propres actualités
           if (userRole === 'admin' || userRole === 'teacher') {
-            // Vérifier si l'utilisateur est l'auteur de l'actualité
             const news = await require('../models').News.findByPk(resourceId);
             if (news && news.author_id === userId) {
               console.log('✅ Auteur de l\'actualité - accès autorisé');
@@ -311,7 +301,7 @@ const generateToken = (user) => {
   return jwt.sign(payload, process.env.JWT_SECRET || 'votre_secret_jwt_par_defaut', options);
 };
 
-// Fonction pour décoder un token (utile pour les tests)
+// Fonction pour décoder un token
 const decodeToken = (token) => {
   try {
     return jwt.verify(token, process.env.JWT_SECRET || 'votre_secret_jwt_par_defaut');

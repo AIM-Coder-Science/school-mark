@@ -1,4 +1,4 @@
-const { Teacher, User, TeacherClassSubject, Class, Subject, Grade, Student, sequelize } = require('../models');
+const { Teacher, User, TeacherClassSubject, Class, Subject, Grade, Student, sequelize, Op } = require('../models');
 
 // Tableau de bord enseignant
 const getTeacherDashboard = async (req, res) => {
@@ -24,7 +24,13 @@ const getTeacherDashboard = async (req, res) => {
         { 
           model: Class,
           as: 'Class',
-          attributes: ['id', 'name', 'level', 'academic_year']
+          attributes: ['id', 'name', 'level', 'academic_year'],
+          // Inclure les étudiants pour que le frontend puisse les compter
+          include: [{
+            model: Student,
+            as: 'Students', 
+            attributes: ['id'] 
+          }]
         },
         { 
           model: Subject,
@@ -44,93 +50,31 @@ const getTeacherDashboard = async (req, res) => {
     // Classes où l'enseignant est prof principal
     const mainTeacherClasses = assignments
       .filter(a => a.is_main_teacher)
-      .map(a => ({
-        id: a.Class?.id,
-        name: a.Class?.name,
-        level: a.Class?.level,
-        subject: a.Subject?.name
-      }))
-      .filter(c => c.id); // Filtrer les classes nulles
-
-    // Récupérer les dernières notes ajoutées
-    const recentGrades = await Grade.findAll({
-      where: { teacher_id: teacherId },
-      include: [
-        { 
-          model: Student,
-          as: 'Student',
-          attributes: ['id', 'first_name', 'last_name', 'matricule']
-        },
-        { 
-          model: Subject,
-          as: 'Subject',
-          attributes: ['name']
-        },
-        { 
-          model: Class,
-          as: 'Class',
-          attributes: ['name']
-        }
-      ],
-      order: [['createdAt', 'DESC']],
-      limit: 5
-    });
+      .map(a => a.Class);
 
     res.json({
       success: true,
       dashboard: {
-        teacher: {
-          id: req.user.Teacher.id,
-          first_name: req.user.Teacher.first_name,
-          last_name: req.user.Teacher.last_name,
-          specialty: req.user.Teacher.specialty,
-          phone: req.user.Teacher.phone
-        },
-        assignments: assignments.map(a => ({
-          id: a.id,
-          class: a.Class,
-          subject: a.Subject,
-          is_main_teacher: a.is_main_teacher,
-          created_at: a.createdAt
-        })),
+        assignments,
         statistics: {
           classesCount,
           subjectsCount,
-          mainTeacherClasses: mainTeacherClasses.length,
-          totalAssignments: assignments.length
+          mainTeacherClasses: mainTeacherClasses.length
         },
-        mainTeacherClasses,
-        recentGrades: recentGrades.map(g => ({
-          id: g.id,
-          student_name: `${g.Student?.first_name} ${g.Student?.last_name}`,
-          subject: g.Subject?.name,
-          class: g.Class?.name,
-          score: g.score,
-          exam_type: g.exam_type,
-          date: g.createdAt
-        }))
+        mainTeacherClasses
       }
     });
-
-    console.log('✅ Dashboard enseignant généré avec succès');
   } catch (error) {
-    console.error('❌ Erreur dashboard enseignant DÉTAILLÉE:');
-    console.error('Message:', error.message);
-    console.error('Stack:', error.stack);
-    
+    console.error('❌ Erreur dashboard enseignant:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur lors de la récupération du tableau de bord.',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+      message: 'Erreur lors de la récupération du tableau de bord.'
     });
   }
 };
 
-// Obtenir les classes assignées à un enseignant
 const getAssignedClasses = async (req, res) => {
   try {
-    console.log('👨‍🏫 GET /teacher/classes - Début');
-    
     if (!req.user.Teacher || !req.user.Teacher.id) {
       return res.status(403).json({
         success: false,
@@ -139,421 +83,95 @@ const getAssignedClasses = async (req, res) => {
     }
 
     const teacherId = req.user.Teacher.id;
-    console.log('👨‍🏫 ID Enseignant pour classes:', teacherId);
 
+    // 💡 CORRECTION CLÉ : Ajout des clauses 'include' pour Class et Subject
+    // Le frontend Classes.jsx s'attend à ce que 'Class' et 'Subject' soient dans chaque assignation.
     const assignments = await TeacherClassSubject.findAll({
       where: { teacher_id: teacherId },
       include: [
         { 
           model: Class,
-          as: 'Class',
-          include: [
-            { 
-              model: Student,
-              as: 'Students',
-              attributes: ['id', 'first_name', 'last_name', 'matricule']
-            }
-          ]
+          as: 'Class', // Assurez-vous d'utiliser l'alias 'Class' défini dans vos associations
+          attributes: ['id', 'name', 'level', 'academic_year']
         },
         { 
           model: Subject,
-          as: 'Subject',
+          as: 'Subject', // Assurez-vous d'utiliser l'alias 'Subject' défini dans vos associations
           attributes: ['id', 'name', 'coefficient']
         }
       ],
-      attributes: ['id', 'is_main_teacher'],
-      order: [[{ model: Class, as: 'Class' }, 'name', 'ASC']]
-    });
-
-    console.log('🏫 Assignments trouvés:', assignments.length);
-
-    // Formater la réponse
-    const formattedClasses = assignments.map(assignment => ({
-      id: assignment.id,
-      class: assignment.Class,
-      subject: assignment.Subject,
-      is_main_teacher: assignment.is_main_teacher,
-      students_count: assignment.Class?.Students?.length || 0
-    }));
-
-    // Grouper par classe pour éviter les doublons
-    const uniqueClasses = [];
-    const classIds = new Set();
-    
-    formattedClasses.forEach(item => {
-      if (item.class && !classIds.has(item.class.id)) {
-        classIds.add(item.class.id);
-        uniqueClasses.push({
-          id: item.class.id,
-          name: item.class.name,
-          level: item.class.level,
-          academic_year: item.class.academic_year,
-          students: item.class.Students || [],
-          subjects: [] // Initialiser le tableau de matières
-        });
-      }
-    });
-
-    // Ajouter les matières à chaque classe
-    formattedClasses.forEach(item => {
-      if (item.class && item.Subject) {
-        const classObj = uniqueClasses.find(c => c.id === item.class.id);
-        if (classObj) {
-          classObj.subjects.push({
-            id: item.Subject.id,
-            name: item.Subject.name,
-            coefficient: item.Subject.coefficient,
-            is_main_teacher: item.is_main_teacher
-          });
-        }
-      }
-    });
-
-    res.json({
-      success: true,
-      classes: uniqueClasses,
-      assignments: formattedClasses,
-      teacher: {
-        id: req.user.Teacher.id,
-        name: `${req.user.Teacher.first_name} ${req.user.Teacher.last_name}`,
-        specialty: req.user.Teacher.specialty
-      },
-      statistics: {
-        totalClasses: uniqueClasses.length,
-        totalAssignments: assignments.length,
-        totalSubjects: new Set(formattedClasses.map(a => a.subject?.id)).size
-      }
-    });
-
-    console.log('✅ Classes assignées récupérées avec succès');
-  } catch (error) {
-    console.error('❌ Erreur classes assignées:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la récupération des classes: ' + error.message
-    });
-  }
-};
-
-// Obtenir les matières par classe pour un enseignant
-const getSubjectsByClass = async (req, res) => {
-  try {
-    const { classId } = req.params;
-    
-    if (!req.user.Teacher || !req.user.Teacher.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Profil enseignant non trouvé.'
-      });
-    }
-
-    const teacherId = req.user.Teacher.id;
-    
-    // Vérifier que l'enseignant est assigné à cette classe
-    const canAccess = await TeacherClassSubject.findOne({
-      where: {
-        teacher_id: teacherId,
-        class_id: classId
-      }
-    });
-
-    if (!canAccess) {
-      return res.status(403).json({
-        success: false,
-        message: 'Vous n\'êtes pas assigné à cette classe.'
-      });
-    }
-
-    const subjects = await TeacherClassSubject.findAll({
-      where: {
-        teacher_id: teacherId,
-        class_id: classId
-      },
-      include: [
-        { 
-          model: Subject,
-          as: 'Subject',
-          attributes: ['id', 'name', 'coefficient', 'description']
-        }
-      ],
-      attributes: ['is_main_teacher']
-    });
-
-    res.json({
-      success: true,
-      class: await Class.findByPk(classId, {
-        attributes: ['id', 'name', 'level']
-      }),
-      subjects: subjects.map(sub => ({
-        id: sub.Subject.id,
-        name: sub.Subject.name,
-        coefficient: sub.Subject.coefficient,
-        description: sub.Subject.description,
-        is_main_teacher: sub.is_main_teacher
-      }))
-    });
-  } catch (error) {
-    console.error('❌ Erreur matières par classe:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la récupération des matières: ' + error.message
-    });
-  }
-};
-
-// Tableau de bord prof principal
-const getMainTeacherDashboard = async (req, res) => {
-  try {
-    const { classId } = req.params;
-    
-    if (!req.user.Teacher || !req.user.Teacher.id) {
-      return res.status(403).json({
-        success: false,
-        message: 'Profil enseignant non trouvé.'
-      });
-    }
-
-    const teacherId = req.user.Teacher.id;
-
-    // Vérifier que l'enseignant est bien prof principal de cette classe
-    const isMainTeacher = await TeacherClassSubject.findOne({
-      where: {
-        teacher_id: teacherId,
-        class_id: classId,
-        is_main_teacher: true
-      }
-    });
-
-    if (!isMainTeacher) {
-      return res.status(403).json({
-        success: false,
-        message: 'Accès refusé. Vous n\'êtes pas professeur principal de cette classe.'
-      });
-    }
-
-    // Récupérer la classe avec ses étudiants
-    const classData = await Class.findByPk(classId, {
-      include: [
-        {
-          model: Student,
-          as: 'Students',
-          attributes: ['id', 'first_name', 'last_name', 'matricule', 'birth_date', 'phone']
-        }
+      attributes: ['id', 'is_main_teacher', 'createdAt', 'class_id', 'subject_id'], // Ajout des IDs pour le débogage
+      order: [
+        [{ model: Class, as: 'Class' }, 'level', 'ASC'],
+        [{ model: Subject, as: 'Subject' }, 'name', 'ASC']
       ]
     });
 
-    if (!classData) {
-      return res.status(404).json({
-        success: false,
-        message: 'Classe non trouvée.'
-      });
-    }
-
-    // Récupérer tous les étudiants de la classe avec leurs notes
-    const students = await Student.findAll({
-      where: { class_id: classId },
-      include: [
-        {
-          model: Grade,
-          as: 'Grades',
-          include: [
-            { 
-              model: Subject,
-              as: 'Subject',
-              attributes: ['id', 'name']
-            }
-          ]
-        }
-      ],
-      order: [['last_name', 'ASC'], ['first_name', 'ASC']]
-    });
-
-    // Calculer les moyennes générales par étudiant
-    const studentsWithAverages = students.map(student => {
-      const gradesBySubject = {};
-      
-      student.Grades?.forEach(grade => {
-        if (!gradesBySubject[grade.subject_id]) {
-          gradesBySubject[grade.subject_id] = {
-            subjectId: grade.subject_id,
-            subjectName: grade.Subject?.name,
-            grades: [],
-            total: 0,
-            count: 0
-          };
-        }
-        
-        gradesBySubject[grade.subject_id].grades.push({
-          id: grade.id,
-          score: grade.score,
-          coefficient: grade.coefficient,
-          exam_type: grade.exam_type,
-          date: grade.createdAt
-        });
-        
-        gradesBySubject[grade.subject_id].total += (grade.score * grade.coefficient);
-        gradesBySubject[grade.subject_id].count += grade.coefficient;
-      });
-
-      // Calculer la moyenne par matière
-      const subjectAverages = Object.values(gradesBySubject).map(subjectData => {
-        const average = subjectData.count > 0 ? subjectData.total / subjectData.count : 0;
-        return {
-          subjectId: subjectData.subjectId,
-          subjectName: subjectData.subjectName,
-          average: parseFloat(average.toFixed(2)),
-          gradesCount: subjectData.grades.length
-        };
-      });
-
-      // Moyenne générale (moyenne des moyennes par matière)
-      const generalAverage = subjectAverages.length > 0
-        ? subjectAverages.reduce((sum, sub) => sum + sub.average, 0) / subjectAverages.length
-        : 0;
-
-      return {
-        ...student.toJSON(),
-        subjectAverages,
-        generalAverage: parseFloat(generalAverage.toFixed(2)),
-        totalSubjects: subjectAverages.length
-      };
-    });
-
-    // Calculer le rang général
-    const rankedStudents = [...studentsWithAverages].sort((a, b) => b.generalAverage - a.generalAverage);
-    const studentsWithRank = studentsWithAverages.map(student => {
-      const rank = rankedStudents.findIndex(s => s.id === student.id) + 1;
-      return {
-        ...student,
-        generalRank: rank
-      };
-    });
-
-    // Statistiques de la classe
-    const classStats = {
-      totalStudents: students.length,
-      studentsWithGrades: students.filter(s => s.Grades?.length > 0).length,
-      averageClassScore: studentsWithAverages.length > 0
-        ? studentsWithAverages.reduce((sum, s) => sum + s.generalAverage, 0) / studentsWithAverages.length
-        : 0
-    };
-
+    // Le frontend Classes.jsx s'attend à 'assignments'
     res.json({
       success: true,
-      class: {
-        id: classData.id,
-        name: classData.name,
-        level: classData.level,
-        academic_year: classData.academic_year
-      },
-      teacher: {
-        id: req.user.Teacher.id,
-        name: `${req.user.Teacher.first_name} ${req.user.Teacher.last_name}`
-      },
-      students: studentsWithRank,
-      statistics: classStats,
-      topStudents: studentsWithRank.slice(0, 5).map(s => ({
-        id: s.id,
-        name: `${s.first_name} ${s.last_name}`,
-        average: s.generalAverage,
-        rank: s.generalRank
-      }))
+      assignments: assignments || [],
     });
   } catch (error) {
-    console.error('❌ Erreur dashboard prof principal:', error);
+    console.error('❌ Erreur récupération classes assignées:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur lors de la récupération du tableau de bord: ' + error.message
+      message: 'Erreur lors de la récupération des classes assignées: ' + error.message
     });
   }
 };
 
+// Obtenir les étudiants d'une classe (pour la saisie des notes)
 const getClassStudents = async (req, res) => {
   try {
     const { classId } = req.params;
-    res.json({
-      success: true,
-      message: `Étudiants de la classe ${classId}`,
-      students: []
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: 'Erreur récupération étudiants'
-    });
-  }
-};
-
-// Test des associations (pour debugging)
-const testAssociations = async (req, res) => {
-  try {
-    console.log('🧪 Test des associations TeacherClassSubject');
     
-    // Tester si TeacherClassSubject a bien les associations
-    const associations = Object.keys(TeacherClassSubject.associations || {});
-    console.log('Associations disponibles:', associations);
-    
-    // Tester une requête simple
-    const testQuery = await TeacherClassSubject.findOne({
-      include: [
-        { model: Class, as: 'Class', attributes: ['id', 'name'] },
-        { model: Subject, as: 'Subject', attributes: ['id', 'name'] }
-      ],
-      limit: 1
-    });
-    
-    // Tester avec un enseignant spécifique si disponible
-    const teacherId = req.user.Teacher?.id;
-    let teacherTest = null;
-    
-    if (teacherId) {
-      teacherTest = await TeacherClassSubject.findOne({
-        where: { teacher_id: teacherId },
-        include: [
-          { model: Class, as: 'Class', attributes: ['id', 'name'] },
-          { model: Subject, as: 'Subject', attributes: ['id', 'name'] }
-        ]
+    // Vérification des permissions
+    if (!req.teacherPermissions.classes.some(c => c.id === parseInt(classId))) {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès non autorisé à cette classe.'
       });
     }
-    
+
+    const students = await Student.findAll({
+      where: { class_id: classId },
+      include: [
+        // ✅ CORRECTION CLÉ 1 : Ajout de l'alias 'Class'
+        { model: Class, as: 'Class', attributes: ['name', 'level'] }, 
+        // ✅ CORRECTION CLÉ 2 : Ajout de l'alias 'User'
+        { model: User, as: 'User', attributes: ['email', 'is_active'] } 
+      ],
+      attributes: ['id', 'first_name', 'last_name', 'matricule', 'birth_date'],
+      order: [['last_name', 'ASC'], ['first_name', 'ASC']]
+    });
+
     res.json({
       success: true,
-      associations,
-      hasClassAssociation: associations.includes('Class'),
-      hasSubjectAssociation: associations.includes('Subject'),
-      testQuery: testQuery ? {
-        id: testQuery.id,
-        class: testQuery.Class,
-        subject: testQuery.Subject
-      } : null,
-      teacherTest: teacherTest ? {
-        id: teacherTest.id,
-        class: teacherTest.Class,
-        subject: teacherTest.Subject
-      } : null,
-      teacherId
+      students
     });
   } catch (error) {
-    console.error('❌ Erreur test associations:', error);
+    console.error('❌ Erreur récupération étudiants de classe:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur lors du test des associations: ' + error.message,
-      error: error.stack
+      message: 'Erreur lors de la récupération des étudiants.'
     });
   }
 };
 
-// Dans teacherController.js
-const getMyStudents = async (req, res) => {
+
+// Tableau de bord pour le professeur principal (avec calcul des moyennes et rangs)
+const getPrincipalTeacherDashboard = async (req, res) => {
   try {
-    const teacherId = req.user.teacherId;
+    const teacherId = req.user.Teacher.id;
     
     console.log(`🎓 Récupération étudiants pour enseignant principal ${teacherId}`);
     
     // Trouver les classes où l'enseignant est principal
     const mainTeacherClasses = await Class.findAll({
-      where: { main_teacher_id: teacherId },
-      attributes: ['id']
+      // ✅ CORRECTION : Le snippet montre `main_teacher_id`, on garde ça
+      where: { teacher_id: teacherId }, 
+      attributes: ['id', 'name', 'level']
     });
 
     const classIds = mainTeacherClasses.map(c => c.id);
@@ -570,35 +188,90 @@ const getMyStudents = async (req, res) => {
     const students = await Student.findAll({
       where: { class_id: classIds },
       include: [
-        { model: Class, attributes: ['name', 'level'] },
-        { model: User, attributes: ['email', 'is_active'] }
+        // ✅ CORRECTION CLÉ 3 : Ajout de l'alias 'Class'
+        { model: Class, as: 'Class', attributes: ['name', 'level'] }, 
+        // ✅ CORRECTION CLÉ 4 : Ajout de l'alias 'User'
+        { model: User, as: 'User', attributes: ['email', 'is_active'] },
+        // Inclure toutes les notes
+        { 
+          model: Grade, 
+          include: [{ 
+            model: Subject, 
+            as: 'Subject', 
+            attributes: ['id', 'name', 'coefficient'] 
+          }] 
+        }
       ],
       order: [['last_name', 'ASC'], ['first_name', 'ASC']]
     });
 
-    console.log(`✅ ${students.length} étudiants trouvés pour enseignant ${teacherId}`);
+    // --------------------------------------------------------------------------------
+    // Calcul des moyennes (Logique de calcul basée sur le snippet de code initial)
+    // --------------------------------------------------------------------------------
+    
+    const studentsWithAverages = students.map(student => {
+      // Regrouper les notes par matière
+      const gradesBySubject = student.Grades.reduce((acc, grade) => {
+        if (!acc[grade.subject_id]) {
+          acc[grade.subject_id] = [];
+        }
+        acc[grade.subject_id].push(grade);
+        return acc;
+      }, {});
+
+      // Calculer la moyenne par matière
+      const subjectAverages = Object.entries(gradesBySubject).map(([subjectId, grades]) => {
+        const total = grades.reduce((sum, grade) => sum + (grade.score * grade.Subject.coefficient), 0);
+        const totalCoefficient = grades.reduce((sum, grade) => sum + grade.Subject.coefficient, 0);
+        const average = totalCoefficient > 0 ? total / totalCoefficient : 0;
+        
+        return {
+          subjectId: parseInt(subjectId),
+          subjectName: grades[0].Subject.name,
+          average: average
+        };
+      });
+
+      // Moyenne générale
+      const generalAverage = subjectAverages.length > 0
+        ? subjectAverages.reduce((sum, sub) => sum + sub.average, 0) / subjectAverages.length
+        : 0;
+
+      return {
+        ...student.toJSON(),
+        subjectAverages,
+        generalAverage
+      };
+    });
+
+    // Calculer le rang général
+    const rankedStudents = [...studentsWithAverages].sort((a, b) => b.generalAverage - a.generalAverage);
+    const studentsWithRank = studentsWithAverages.map(student => {
+      const rank = rankedStudents.findIndex(s => s.id === student.id) + 1;
+      return {
+        ...student,
+        generalRank: rank
+      };
+    });
 
     res.json({
       success: true,
-      students,
-      classCount: classIds.length,
-      studentCount: students.length
+      class: mainTeacherClasses.length > 0 ? mainTeacherClasses[0] : null,
+      students: studentsWithRank
     });
   } catch (error) {
-    console.error('❌ Erreur récupération étudiants:', error);
+    console.error('❌ Erreur dashboard prof principal:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur lors de la récupération des étudiants'
+      message: 'Erreur lors de la récupération du tableau de bord.'
     });
   }
 };
 
+
 module.exports = {
   getTeacherDashboard,
   getAssignedClasses,
-  getSubjectsByClass,
-  getMainTeacherDashboard,
   getClassStudents,
-  getMyStudents,
-  testAssociations  // Pour debugging
+  getPrincipalTeacherDashboard,
 };

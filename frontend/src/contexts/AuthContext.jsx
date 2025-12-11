@@ -74,7 +74,6 @@ export const AuthProvider = ({ children }) => {
   const value = {
     user,
     login,
-    //register, // Assurez-vous que cette fonction est mise à jour comme login
     logout,
     loading,
     isAuthenticated: !!user,

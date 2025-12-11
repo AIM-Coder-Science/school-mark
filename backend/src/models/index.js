@@ -11,7 +11,7 @@ const Grade = require('./Grade');
 const News = require('./News');
 const Appreciation = require('./Appreciation');
 const AcademicYear = require('./AcademicYear');
-
+const SystemConfig = require('./SystemConfig');
 // Configuration des associations
 const setupAssociations = () => {
   console.log('🔗 Configuration des associations Sequelize...');
@@ -220,6 +220,10 @@ const setupAssociations = () => {
     as: 'Classes'
   });
 
+  SystemConfig.sync({ alter: true })
+  .then(() => console.log('✅ Table SystemConfig synchronisée'))
+  .catch(err => console.error('❌ Erreur synchronisation SystemConfig:', err));
+
   console.log('✅ Associations configurées avec succès');
 };
 
@@ -270,5 +274,5 @@ module.exports = {
   News,
   Appreciation,
   AcademicYear,
-  // N'exporte PAS setupAssociations car elle est déjà exécutée
+  SystemConfig
 };

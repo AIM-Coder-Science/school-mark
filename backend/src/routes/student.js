@@ -9,6 +9,8 @@ const {
 const { getNews } = require('../controllers/newsController');
 const { auth, authorize, studentAccessControl } = require('../middleware/auth');
 
+const { getStudentNews } = require('../controllers/newsController');
+
 // Toutes les routes nécessitent l'authentification et le rôle student
 router.use(auth, authorize('student'), studentAccessControl);
 
@@ -24,5 +26,5 @@ router.get('/profile', getStudentProfile);
 
 // Actualités
 router.get('/news', getNews);
-
+router.get('/news', getStudentNews);
 module.exports = router;

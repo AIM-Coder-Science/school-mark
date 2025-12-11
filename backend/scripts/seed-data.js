@@ -95,7 +95,7 @@ const seedDatabase = async () => {
       // Leroy - Histoire en Terminale A
       { teacher_id: teachers[2].id, class_id: classes[0].id, subject_id: subjects[2].id }
     ]);
-
+      await classes[0].update({ teacher_id: teachers.id });
     // Créer des étudiants
     const studentUsers = await User.bulkCreate([
       { 

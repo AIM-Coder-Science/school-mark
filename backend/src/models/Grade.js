@@ -57,7 +57,7 @@ const Grade = sequelize.define('Grade', {
     defaultValue: 1
   },
   semester: {
-    type: DataTypes.ENUM('1', '2'),
+    type: DataTypes.ENUM('1', '2', '3'),
     allowNull: false,
     defaultValue: '1'
   },

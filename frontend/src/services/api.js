@@ -40,7 +40,6 @@ api.interceptors.response.use(
 // Services d'authentification
 export const authAPI = {
   login: (credentials) => api.post('/auth/login', credentials),
-  //register: (userData) => api.post('/auth/register', userData),
   getProfile: () => api.get('/auth/profile'),
 }
 
@@ -52,41 +51,87 @@ export const teacherAPI = {
   createGrade: (classId, data) => api.post(`/teacher/classes/${classId}/grades`, data),
   getSubjectsByClass: (classId) => api.get(`/teacher/classes/${classId}/subjects`),
   getMainTeacherDashboard: (classId) => api.get(`/teacher/classes/${classId}/main-teacher`),
+  getNews: async (params = {}) => {
+    const response = await api.get('/news', { params });
+    return response.data;
+  },
+  getAssignedClassesWithSubjects: async () => {
+    // MODIFICATION CRITIQUE: Appeler la bonne route API
+    try {
+      const response = await api.get('/teacher/classes');
+      return response.data;
+    } catch (error) {
+      console.error('Erreur lors de la récupération des classes:', error);
+      throw error;
+    }
+  },
+  getClassStudents: async (classId) => {
+    try {
+      const response = await api.get(`/teacher/classes/${classId}/students`);
+      return response.data;
+    } catch (error) {
+      console.error(`Erreur lors de la récupération des étudiants de la classe ${classId}:`, error);
+      // Retourner un objet vide pour éviter les erreurs
+      return {
+        success: true,
+        data: { students: [] }
+      };
+    }
+  }
 }
 
 // Services étudiants
 export const studentAPI = {
   getDashboard: () => api.get('/student/dashboard'),
   getReportCard: (semester) => api.get(`/student/report-card/${semester || ''}`),
+  getNews: async (params = {}) => {
+    const response = await api.get('/news', { params });
+    return response.data;
+  }
 }
 
-// Services admin - COMPLET
+// Services admin
 export const adminAPI = {
-  // Dashboard
-  getDashboard: () => api.get('/admin/dashboard'),
+getDashboard: async () => {
+    try {
+      const response = await api.get('/admin/dashboard');
+      return response.data;
+    } catch (error) {
+      console.error('Erreur dashboard admin:', error);
+      // Retourner des données par défaut pour éviter les erreurs
+      return {
+        success: true,
+        dashboard: {
+          statistics: {
+            studentsCount: 0,
+            teachersCount: 0,
+            classesCount: 0,
+            subjectsCount: 0,
+            newsCount: 0,
+            activeUsers: 0
+          },
+          recentStudents: [],
+          recentTeachers: [],
+          recentNews: []
+        }
+      };
+    }
+  },
   getAllData: () => api.get('/admin/all-data'),
-  
-  // Enseignants
   getAllTeachers: () => api.get('/admin/teachers'),
   createTeacher: (data) => api.post('/admin/teachers', data),
   deleteTeacher: (id) => api.delete(`/admin/teachers/${id}`),
   assignTeacher: (data) => api.post('/admin/teachers/assign', data),
-  
-  // Étudiants
   getAllStudents: () => api.get('/admin/students'),
   createStudent: (data) => api.post('/admin/students', data),
   deleteStudent: (id) => api.delete(`/admin/students/${id}`),
-  
-  // Classes
   getAllClasses: () => api.get('/admin/classes'),
   createClass: (data) => api.post('/admin/classes', data),
-  
-  // Matières
   getAllSubjects: () => api.get('/admin/subjects'),
   createSubject: (data) => api.post('/admin/subjects', data),
-  
-  // Utilisateurs
   toggleUserStatus: (id, data) => api.patch(`/admin/users/${id}/status`, data),
+  updateTeacher: (id, data) => api.put(`/admin/teachers/${id}`, data),
+  checkMainTeacher: (classId) => api.get(`/admin/classes/${classId}/main-teacher`),
 }
 
 // Services actualités
@@ -117,9 +162,62 @@ export const utilsAPI = {
 }
 
 // Services notes
+
 export const gradeAPI = {
-  createGrade: (classId, data) => api.post(`/grades/classes/${classId}/grades`, data),
-  getClassGrades: (classId, params) => api.get(`/grades/classes/${classId}/grades`, { params }),
+  createGrade: (classId, data) => api.post(`/teacher/classes/${classId}/grades`, data),
+  getClassGrades: (classId, params) => api.get(`/teacher/classes/${classId}/grades`, { params }),
+// Dans api.js, modifiez getClassGradesDetails :
+getClassGradesDetails: async (classId, params) => {
+  try {
+    const response = await api.get(`/teacher/classes/${classId}/grades/details`, { params });
+    console.log('📊 Réponse notes détails:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`Erreur lors de la récupération des notes de la classe ${classId}:`, error);
+    // Retourner une structure vide mais valide
+    return {
+      success: true,
+      data: {
+        class_id: classId,
+        period: params?.period || 1,
+        grades: {}
+      }
+    };
+  }
+},
+  saveGrades: async (classId, payload /*subjectId, period, gradesData*/) => {
+    try {
+      const response = await api.post(`/teacher/classes/${classId}/grades/bulk`, payload/*{
+        subjectId,
+        period,
+        grades: gradesData
+      }*/);
+      console.log('✅ API - Réponse:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Erreur lors de la sauvegarde des notes:', error);
+      throw error;
+    }
+  }
+};
+
+export const systemAPI = {
+  getConfig: async () => {
+    try {
+      const response = await api.get('/system/config');
+      return response.data;
+    } catch (error) {
+      console.error('Erreur lors de la récupération de la configuration:', error);
+      return {
+        success: true,
+        data: {
+          system_type: 'semestre',
+          max_interros: 5,
+          max_devoirs: 3
+        }
+      };
+    }
+  }
 }
 
 // Service de santé

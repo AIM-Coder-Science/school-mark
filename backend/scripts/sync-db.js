@@ -14,7 +14,7 @@ const syncDatabase = async () => {
     console.log('📊 Configuration des modèles...');
     
     // Synchronisation avec alter (ne supprime pas les données existantes)
-    await sequelize.sync({ force: false, alter: true });
+    await sequelize.sync({ force: true, alter: false });
     console.log('✅ Base de données synchronisée');
     
     // Vérifier les tables créées

@@ -18,60 +18,116 @@ const News = sequelize.define('News', {
   },
   title: {
     type: DataTypes.STRING(255),
-    allowNull: false
+    allowNull: false,
+    validate: {
+      notEmpty: true,
+      len: [3, 255]
+    }
   },
   content: {
     type: DataTypes.TEXT,
-    allowNull: false
+    allowNull: false,
+    validate: {
+      notEmpty: true,
+      len: [10, 5000]
+    }
   },
   target_roles: {
-    type: DataTypes.TEXT, // ✅ TEXT pour compatibilité MySQL
+    type: DataTypes.TEXT, // TEXT pour MySQL
     allowNull: false,
     defaultValue: '["all"]',
     get() {
-      const rawValue = this.getDataValue('target_roles');
-      if (!rawValue) return ['all'];
-      
       try {
+        const rawValue = this.getDataValue('target_roles');
+        
+        // Si vide, retourner ['all']
+        if (!rawValue || rawValue.trim() === '') {
+          return ['all'];
+        }
+        
         // Si c'est déjà un tableau, le retourner
-        if (Array.isArray(rawValue)) return rawValue;
+        if (Array.isArray(rawValue)) {
+          return rawValue;
+        }
         
         // Si c'est une chaîne JSON, la parser
         if (typeof rawValue === 'string') {
-          return JSON.parse(rawValue);
+          // Nettoyer la chaîne
+          const cleaned = rawValue.trim();
+          
+          // Vérifier si c'est du JSON valide
+          if (cleaned.startsWith('[') && cleaned.endsWith(']')) {
+            return JSON.parse(cleaned);
+          }
+          
+          // Sinon, considérer comme une chaîne simple
+          return [cleaned];
         }
         
+        // Par défaut
         return ['all'];
       } catch (error) {
-        console.error('Erreur parsing target_roles:', error);
+        console.warn('⚠️ Erreur parsing target_roles, utilisation de la valeur par défaut:', error);
         return ['all'];
       }
     },
     set(value) {
-      // Toujours stocker en JSON string
-      if (Array.isArray(value)) {
-        this.setDataValue('target_roles', JSON.stringify(value));
-      } else if (typeof value === 'string') {
-        // Vérifier si c'est déjà du JSON
-        try {
-          JSON.parse(value);
-          this.setDataValue('target_roles', value);
-        } catch {
-          // Si ce n'est pas du JSON, l'envelopper
-          this.setDataValue('target_roles', JSON.stringify([value]));
+      try {
+        let finalValue;
+        
+        if (Array.isArray(value)) {
+          // S'assurer que c'est un tableau de strings
+          finalValue = value.filter(v => typeof v === 'string');
+          if (finalValue.length === 0) finalValue = ['all'];
+        } else if (typeof value === 'string') {
+          // Tenter de parser si c'est du JSON
+          const trimmed = value.trim();
+          if (trimmed.startsWith('[') && trimmed.endsWith(']')) {
+            try {
+              const parsed = JSON.parse(trimmed);
+              if (Array.isArray(parsed)) {
+                finalValue = parsed.filter(v => typeof v === 'string');
+                if (finalValue.length === 0) finalValue = ['all'];
+              } else {
+                finalValue = ['all'];
+              }
+            } catch {
+              finalValue = [trimmed];
+            }
+          } else {
+            finalValue = [trimmed];
+          }
+        } else {
+          finalValue = ['all'];
         }
-      } else {
+        
+        // Stocker comme JSON string
+        this.setDataValue('target_roles', JSON.stringify(finalValue));
+      } catch (error) {
+        console.warn('⚠️ Erreur set target_roles, utilisation de la valeur par défaut');
         this.setDataValue('target_roles', JSON.stringify(['all']));
       }
     }
   },
   is_published: {
     type: DataTypes.BOOLEAN,
-    defaultValue: true
+    defaultValue: true,
+    allowNull: false
   }
 }, {
   tableName: 'news',
-  timestamps: true
+  timestamps: true,
+  indexes: [
+    {
+      fields: ['is_published']
+    },
+    {
+      fields: ['author_id']
+    },
+    {
+      fields: ['createdAt']
+    }
+  ]
 });
 
 module.exports = News;

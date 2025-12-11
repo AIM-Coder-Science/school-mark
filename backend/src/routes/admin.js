@@ -1,3 +1,4 @@
+// backend/src/routes/admin.js
 const express = require('express');
 const router = express.Router();
 const { 
@@ -8,7 +9,9 @@ const {
   createClass,
   createSubject,
   getAllData,
-  toggleUserStatus
+  toggleUserStatus,
+  updateTeacher,
+  checkMainTeacher
 } = require('../controllers/adminController');
 const { createNews, getNews, updateNews, deleteNews } = require('../controllers/newsController');
 const { auth, authorize } = require('../middleware/auth');
@@ -21,7 +24,8 @@ const bcrypt = require('bcryptjs');
 router.use(auth, authorize('admin'));
 
 // Dashboard admin
-router.get('/dashboard', getAdminDashboard);
+//router.get('/dashboard', getAdminDashboard);
+router.get('/dashboard', auth, authorize(['admin']),getAdminDashboard);
 router.get('/all-data', getAllData);
 
 // Gestion des enseignants
@@ -33,7 +37,7 @@ router.post('/teachers/assign', assignTeacherToClass);
 // Gestion des étudiants
 router.get('/students', getAllStudents);
 router.post('/students', createStudent);
-router.delete('/students/:id', deleteStudent); // CORRIGÉ : fonction maintenant définie
+router.delete('/students/:id', deleteStudent);
 router.put('/students/:id', updateStudent);
 
 // Gestion des utilisateurs
@@ -57,12 +61,16 @@ router.post('/news', createNews);
 router.put('/news/:id', updateNews);
 router.delete('/news/:id', deleteNews);
 
-// Fonctions manquantes
+router.put('/teachers/:id', auth, authorize(['admin']), updateTeacher);
+router.get('/classes/:classId/main-teacher', auth, authorize(['admin']), checkMainTeacher);
+
+// ✅ CORRECTION : Ajout de l'alias 'User'
 async function getAllTeachers(req, res) {
   try {
     const teachers = await Teacher.findAll({
       include: [{ 
-        model: User, 
+        model: User,
+        as: 'User',  // ✅ AJOUT DE L'ALIAS
         attributes: ['id', 'email', 'is_active', 'createdAt'] 
       }],
       order: [['createdAt', 'DESC']]
@@ -78,12 +86,14 @@ async function getAllTeachers(req, res) {
   }
 }
 
+// ✅ CORRECTION : Ajout de l'alias 'User'
 async function getAllStudents(req, res) {
   try {
     const students = await Student.findAll({
       include: [
         { 
-          model: User, 
+          model: User,
+          as: 'User',  
           attributes: ['id', 'email', 'is_active', 'createdAt'] 
         },
         { 
@@ -137,7 +147,6 @@ async function createStudent(req, res) {
   try {
     const { email, password, first_name, last_name, matricule, class_id, phone, birth_date } = req.body;
 
-    // Vérifier si l'email existe déjà
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
       return res.status(400).json({
@@ -146,10 +155,8 @@ async function createStudent(req, res) {
       });
     }
 
-    // Hasher le mot de passe
     const hashedPassword = await bcrypt.hash(password || 'password123', 10);
 
-    // Créer l'utilisateur
     const user = await User.create({
       email,
       password: hashedPassword,
@@ -157,10 +164,8 @@ async function createStudent(req, res) {
       is_active: true
     });
 
-    // Générer un matricule si non fourni
     const studentMatricule = matricule || `ETU${Date.now().toString().slice(-6)}`;
 
-    // Créer l'étudiant
     const student = await Student.create({
       user_id: user.id,
       first_name,
@@ -171,11 +176,11 @@ async function createStudent(req, res) {
       birth_date: birth_date || null
     });
 
-    // Récupérer l'étudiant avec ses relations
     const studentWithDetails = await Student.findByPk(student.id, {
       include: [
         { 
-          model: User, 
+          model: User,
+          as: 'User',
           attributes: ['email', 'is_active'] 
         },
         { 
@@ -215,7 +220,7 @@ async function updateStudent(req, res) {
 
     const updatedStudent = await Student.findByPk(id, {
       include: [
-        { model: User },
+        { model: User, as: 'User' },
         { model: Class }
       ]
     });
@@ -234,12 +239,12 @@ async function updateStudent(req, res) {
   }
 }
 
-async function deleteStudent(req, res) { // FONCTION AJOUTÉE
+async function deleteStudent(req, res) {
   try {
     const { id } = req.params;
 
     const student = await Student.findByPk(id, {
-      include: [{ model: User }]
+      include: [{ model: User, as: 'User' }]
     });
     
     if (!student) {
@@ -249,7 +254,6 @@ async function deleteStudent(req, res) { // FONCTION AJOUTÉE
       });
     }
 
-    // Désactiver l'utilisateur plutôt que de le supprimer (pour garder l'historique)
     if (student.User) {
       await student.User.update({ is_active: false });
     }

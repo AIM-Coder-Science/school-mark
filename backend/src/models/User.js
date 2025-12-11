@@ -28,11 +28,11 @@ const User = sequelize.define('User', {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   },
-  first_name: {  // AJOUTEZ CETTE LIGNE
+  first_name: { 
       type: DataTypes.STRING,
       allowNull: true
     },
-    last_name: {   // AJOUTEZ CETTE LIGNE
+    last_name: {   
       type: DataTypes.STRING,
       allowNull: true
     }

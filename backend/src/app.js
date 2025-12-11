@@ -11,6 +11,7 @@ const studentRoutes = require('./routes/student');
 const teacherRoutes = require('./routes/teacher');
 const adminRoutes = require('./routes/admin');
 const newsRoutes = require('./routes/news');
+const systemRoutes = require('./routes/system');
 // const classRoutes = require('./routes/class');
 
 // Configuration du serveur
@@ -37,6 +38,10 @@ app.use((req, res, next) => {
   next();
 });
 
+app.use('/api/system', systemRoutes);
+
+console.log('🔄 Routes /system ajoutées');
+
 // Routes publiques
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -46,6 +51,8 @@ app.get('/api/health', (req, res) => {
     version: '1.0.0'
   });
 });
+
+
 
 // Routes API
 app.use('/api/auth', authRoutes);
