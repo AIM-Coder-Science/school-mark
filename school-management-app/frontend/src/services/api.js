@@ -3,10 +3,12 @@ import axiosInstance from './axios';
 // Auth endpoints
 export const authAPI = {
   login: (credentials) => axiosInstance.post('/auth/login', credentials),
-  getProfile: () => axiosInstance.get('/auth/me'),
+  getMe: () => axiosInstance.get('/auth/me'), // ✅ Corrigé: getProfile → getMe
   changePassword: (data) => axiosInstance.put('/auth/change-password', data),
   logout: () => axiosInstance.post('/auth/logout'),
   checkAvailability: (data) => axiosInstance.post('/auth/check-availability', data),
+  forgotPassword: (data) => axiosInstance.post('/auth/forgot-password', data), // ✅ Ajouté
+  resetPassword: (data) => axiosInstance.post('/auth/reset-password', data), // ✅ Ajouté
 };
 
 // Admin endpoints
@@ -14,23 +16,40 @@ export const adminAPI = {
   // Teachers
   createTeacher: (data) => axiosInstance.post('/admin/teachers', data),
   getTeachers: () => axiosInstance.get('/admin/teachers'),
+  getTeacher: (id) => axiosInstance.get(`/admin/teachers/${id}`), // ✅ Ajouté
+  updateTeacher: (id, data) => axiosInstance.put(`/admin/teachers/${id}`, data), // ✅ Ajouté
+  deleteTeacher: (id) => axiosInstance.delete(`/admin/teachers/${id}`), // ✅ Ajouté
   
   // Students
   createStudent: (data) => axiosInstance.post('/admin/students', data),
   getStudents: (classId) => 
     axiosInstance.get(`/admin/students${classId ? `?classId=${classId}` : ''}`),
+  getStudent: (id) => axiosInstance.get(`/admin/students/${id}`), // ✅ Ajouté
+  updateStudent: (id, data) => axiosInstance.put(`/admin/students/${id}`, data), // ✅ Ajouté
+  deleteStudent: (id) => axiosInstance.delete(`/admin/students/${id}`), // ✅ Ajouté
   
   // Classes
   createClass: (data) => axiosInstance.post('/admin/classes', data),
   getClasses: () => axiosInstance.get('/admin/classes'),
+  getClass: (id) => axiosInstance.get(`/admin/classes/${id}`), // ✅ Ajouté
+  updateClass: (id, data) => axiosInstance.put(`/admin/classes/${id}`, data), // ✅ Ajouté
+  deleteClass: (id) => axiosInstance.delete(`/admin/classes/${id}`), // ✅ Ajouté
   assignPrincipal: (classId, teacherId) =>
     axiosInstance.put(`/admin/classes/${classId}/principal`, { teacherId }),
   
   // Subjects
   createSubject: (data) => axiosInstance.post('/admin/subjects', data),
+  getSubjects: () => axiosInstance.get('/admin/subjects'), // ✅ Ajouté
+  getSubject: (id) => axiosInstance.get(`/admin/subjects/${id}`), // ✅ Ajouté
+  updateSubject: (id, data) => axiosInstance.put(`/admin/subjects/${id}`, data), // ✅ Ajouté
+  deleteSubject: (id) => axiosInstance.delete(`/admin/subjects/${id}`), // ✅ Ajouté
   
   // Publications
   createPublication: (data) => axiosInstance.post('/admin/publications', data),
+  getPublications: (params) => axiosInstance.get('/admin/publications', { params }), // ✅ Ajouté
+  getPublication: (id) => axiosInstance.get(`/admin/publications/${id}`), // ✅ Ajouté
+  updatePublication: (id, data) => axiosInstance.put(`/admin/publications/${id}`, data), // ✅ Ajouté
+  deletePublication: (id) => axiosInstance.delete(`/admin/publications/${id}`), // ✅ Ajouté
   
   // Stats
   getStats: () => axiosInstance.get('/admin/stats'),
@@ -38,6 +57,7 @@ export const adminAPI = {
   // Users
   updateUser: (userId, data) => axiosInstance.put(`/admin/users/${userId}`, data),
   deleteUser: (userId) => axiosInstance.delete(`/admin/users/${userId}`),
+  toggleUserStatus: (userId) => axiosInstance.patch(`/admin/users/${userId}/toggle-status`), // ✅ Ajouté
 };
 
 // Teacher endpoints
@@ -46,6 +66,8 @@ export const teacherAPI = {
   getClassStudents: (classId, subjectId) =>
     axiosInstance.get(`/teacher/classes/${classId}/students${subjectId ? `?subjectId=${subjectId}` : ''}`),
   addGrade: (data) => axiosInstance.post('/teacher/grades', data),
+  updateGrade: (gradeId, data) => axiosInstance.put(`/teacher/grades/${gradeId}`, data), // ✅ Ajouté
+  deleteGrade: (gradeId) => axiosInstance.delete(`/teacher/grades/${gradeId}`), // ✅ Ajouté
   getClassGrades: (classId, subjectId, params) =>
     axiosInstance.get(`/teacher/classes/${classId}/subjects/${subjectId}/grades`, { params }),
   calculateAverage: (studentId, subjectId, params) =>
@@ -60,6 +82,9 @@ export const teacherAPI = {
   
   // Stats
   getTeacherStats: () => axiosInstance.get('/teacher/stats'),
+  
+  // Publications (pour enseignants)
+  getMyPublications: (params) => axiosInstance.get('/teacher/publications', { params }), // ✅ Ajouté
 };
 
 // Student endpoints
@@ -85,4 +110,5 @@ export const commonAPI = {
       },
     });
   },
+  downloadFile: (fileId) => axiosInstance.get(`/files/${fileId}`, { responseType: 'blob' }), // ✅ Ajouté
 };

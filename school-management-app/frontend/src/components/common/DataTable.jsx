@@ -15,6 +15,7 @@ import {
   InputAdornment,
   Box,
   Chip,
+  Typography,
 } from '@mui/material';
 import {
   Search as SearchIcon,

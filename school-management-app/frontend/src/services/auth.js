@@ -26,11 +26,18 @@ export const loginUser = async (credentials) => {
   }
 };
 
-export const logoutUser = () => {
-  localStorage.removeItem('token');
-  localStorage.removeItem('user');
-  toast.success('Déconnexion réussie');
-  window.location.href = '/login';
+export const logoutUser = async () => {
+  try {
+    // Optionnel: appeler l'API pour invalider le token côté serveur
+    await authAPI.logout();
+  } catch (error) {
+    console.error('Logout error:', error);
+  } finally {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    toast.success('Déconnexion réussie');
+    window.location.href = '/login';
+  }
 };
 
 export const getCurrentUser = () => {
@@ -68,13 +75,19 @@ export const checkAuth = async () => {
   }
   
   try {
-    const response = await authAPI.getProfile();
+    // ✅ Corrigé: utilise getMe au lieu de getProfile
+    const response = await authAPI.getMe();
     if (response.data.success) {
       updateUserProfile(response.data.data);
       return { authenticated: true, user: response.data.data };
     }
   } catch (error) {
     console.error('Auth check error:', error);
+    // ✅ Ajouté: nettoyer le localStorage en cas d'erreur
+    if (error.response?.status === 401) {
+      localStorage.removeItem('token');
+      localStorage.removeItem('user');
+    }
   }
   
   return { authenticated: false };
