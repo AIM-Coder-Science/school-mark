@@ -14,12 +14,23 @@ const Login = lazy(() => import('./components/auth/Login'));
 const AdminDashboard = lazy(() => import('./pages/Admin/Dashboard'));
 const TeachersList = lazy(() => import('./pages/Admin/Teachers/List'));
 const CreateTeacher = lazy(() => import('./pages/Admin/Teachers/Create'));
+const TeacherDetail = lazy(() => import ('./pages/Admin/Teachers/Detail'));
+const EditTeacher = lazy(() => import ('./pages/Admin/Teachers/Edit'));
 const StudentsList = lazy(() => import('./pages/Admin/Students/List'));
 const CreateStudent = lazy(() => import('./pages/Admin/Students/Create'));
+
+// Admin Classes
 const ClassesList = lazy(() => import('./pages/Admin/Classes/List'));
 const CreateClass = lazy(() => import('./pages/Admin/Classes/Create'));
+const ClassDetail = lazy(() => import('./pages/Admin/Classes/Detail'));
+const EditClass = lazy(() => import('./pages/Admin/Classes/Edit'));
+
+// Admin Subjects (Modifié pour inclure Detail et Edit)
 const SubjectsList = lazy(() => import('./pages/Admin/Subjects/List'));
 const CreateSubject = lazy(() => import('./pages/Admin/Subjects/Create'));
+const SubjectDetail = lazy(() => import('./pages/Admin/Subjects/Detail'));
+const EditSubject = lazy(() => import('./pages/Admin/Subjects/Edit'));
+
 const Publications = lazy(() => import('./pages/Admin/Publications'));
 const AdminStats = lazy(() => import('./pages/Admin/Stats'));
 
@@ -70,22 +81,35 @@ const AppContent = () => {
           {/* Admin Routes */}
           <Route path="admin">
             <Route path="dashboard" element={<ProtectedRoute role="admin"><AdminDashboard /></ProtectedRoute>} />
+            
             <Route path="teachers">
               <Route index element={<ProtectedRoute role="admin"><TeachersList /></ProtectedRoute>} />
               <Route path="new" element={<ProtectedRoute role="admin"><CreateTeacher /></ProtectedRoute>} />
+              <Route path=":teacherId" element={<ProtectedRoute role="admin"><TeacherDetail /></ProtectedRoute>} />
+              <Route path="edit/:teacherId" element={<ProtectedRoute role="admin"><EditTeacher /></ProtectedRoute>} />
             </Route>
+
             <Route path="students">
               <Route index element={<ProtectedRoute role="admin"><StudentsList /></ProtectedRoute>} />
               <Route path="new" element={<ProtectedRoute role="admin"><CreateStudent /></ProtectedRoute>} />
             </Route>
+
             <Route path="classes">
               <Route index element={<ProtectedRoute role="admin"><ClassesList /></ProtectedRoute>} />
               <Route path="new" element={<ProtectedRoute role="admin"><CreateClass /></ProtectedRoute>} />
+              <Route path=":classId" element={<ProtectedRoute role="admin"><ClassDetail /></ProtectedRoute>} />
+              <Route path="edit/:classId" element={<ProtectedRoute role="admin"><EditClass /></ProtectedRoute>} />
             </Route>
+
+            {/* --- SECTION SUBJECTS CORRIGÉE --- */}
             <Route path="subjects">
               <Route index element={<ProtectedRoute role="admin"><SubjectsList /></ProtectedRoute>} />
               <Route path="new" element={<ProtectedRoute role="admin"><CreateSubject /></ProtectedRoute>} />
+              <Route path=":subjectId" element={<ProtectedRoute role="admin"><SubjectDetail /></ProtectedRoute>} />
+              <Route path="edit/:subjectId" element={<ProtectedRoute role="admin"><EditSubject /></ProtectedRoute>} />
             </Route>
+            {/* ---------------------------------- */}
+
             <Route path="publications" element={<ProtectedRoute role="admin"><Publications /></ProtectedRoute>} />
             <Route path="stats" element={<ProtectedRoute role="admin"><AdminStats /></ProtectedRoute>} />
           </Route>

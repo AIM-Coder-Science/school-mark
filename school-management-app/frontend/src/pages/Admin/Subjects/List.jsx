@@ -21,20 +21,18 @@ import {
 import {
   Add as AddIcon,
   Search as SearchIcon,
-  FilterList as FilterIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   Visibility as VisibilityIcon,
   Book as BookIcon,
   Numbers as NumbersIcon,
-  Timeline as TimelineIcon,
+  Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate } from 'react-router-dom';
 import DataTable from '../../../components/common/DataTable';
 import Loader from '../../../components/common/Loader';
-// Note: Vous devrez créer cet endpoint
-// import { adminAPI } from '../../../services/api';
+import { adminAPI } from '../../../services/api';
 import toast from 'react-hot-toast';
 import { useTheme } from '@mui/material/styles';
 
@@ -54,76 +52,11 @@ const SubjectsList = () => {
   const fetchSubjects = async () => {
     try {
       setLoading(true);
-      // Simuler des données pour l'exemple
-      const mockSubjects = [
-        {
-          id: 1,
-          name: 'Mathématiques',
-          code: 'MATH',
-          coefficient: 3,
-          createdBy: 1,
-          createdAt: '2024-01-15',
-          classes: [{ id: 1, name: '6ème A' }, { id: 2, name: '5ème B' }],
-          teachers: [{ id: 1, firstName: 'Jean', lastName: 'Dupont' }],
-        },
-        {
-          id: 2,
-          name: 'Physique',
-          code: 'PHY',
-          coefficient: 2,
-          createdBy: 1,
-          createdAt: '2024-01-15',
-          classes: [{ id: 1, name: '6ème A' }, { id: 3, name: '4ème C' }],
-          teachers: [{ id: 2, firstName: 'Marie', lastName: 'Curie' }],
-        },
-        {
-          id: 3,
-          name: 'Français',
-          code: 'FR',
-          coefficient: 3,
-          createdBy: 1,
-          createdAt: '2024-01-16',
-          classes: [{ id: 1, name: '6ème A' }, { id: 2, name: '5ème B' }],
-          teachers: [{ id: 3, firstName: 'Victor', lastName: 'Hugo' }],
-        },
-        {
-          id: 4,
-          name: 'Anglais',
-          code: 'ANG',
-          coefficient: 2,
-          createdBy: 1,
-          createdAt: '2024-01-16',
-          classes: [{ id: 1, name: '6ème A' }, { id: 4, name: '3ème D' }],
-          teachers: [{ id: 4, firstName: 'William', lastName: 'Shakespeare' }],
-        },
-        {
-          id: 5,
-          name: 'Histoire-Géographie',
-          code: 'HIST',
-          coefficient: 2,
-          createdBy: 1,
-          createdAt: '2024-01-17',
-          classes: [{ id: 2, name: '5ème B' }, { id: 3, name: '4ème C' }],
-          teachers: [{ id: 5, firstName: 'Napoléon', lastName: 'Bonaparte' }],
-        },
-        {
-          id: 6,
-          name: 'Sciences',
-          code: 'SCI',
-          coefficient: 2,
-          createdBy: 1,
-          createdAt: '2024-01-18',
-          classes: [{ id: 1, name: '6ème A' }, { id: 2, name: '5ème B' }],
-          teachers: [{ id: 1, firstName: 'Jean', lastName: 'Dupont' }],
-        },
-      ];
-      
-      setSubjects(mockSubjects);
-      
-      // En production:
-      // const response = await adminAPI.getSubjects();
-      // setSubjects(response.data.data || []);
+      const response = await adminAPI.getAllSubjects();
+      // On s'assure de récupérer les données correctement selon la structure de ta réponse API
+      setSubjects(response.data.data || []);
     } catch (error) {
+      console.error('Erreur chargement matières:', error);
       toast.error('Erreur lors du chargement des matières');
     } finally {
       setLoading(false);
@@ -144,14 +77,13 @@ const SubjectsList = () => {
 
   const confirmDelete = async () => {
     try {
-      // Note: Vous devrez créer un endpoint pour supprimer les matières
-      // await adminAPI.deleteSubject(deleteDialog.id);
+      await adminAPI.deleteSubject(deleteDialog.id);
       toast.success('Matière supprimée avec succès');
+      setDeleteDialog(null);
       fetchSubjects();
     } catch (error) {
-      toast.error('Erreur lors de la suppression');
-    } finally {
-      setDeleteDialog(null);
+      console.error('Erreur suppression:', error);
+      toast.error(error.response?.data?.message || 'Erreur lors de la suppression');
     }
   };
 
@@ -161,15 +93,16 @@ const SubjectsList = () => {
       subject.code.toLowerCase().includes(search.toLowerCase());
   });
 
+  // Définition des colonnes pour le tableau
   const columns = [
     {
-      field: 'subject',
+      field: 'name',
       headerName: 'Matière',
       width: 250,
       render: (value, row) => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Avatar sx={{ bgcolor: 'primary.main' }}>
-            <BookIcon />
+          <Avatar sx={{ bgcolor: 'primary.main', width: 32, height: 32 }}>
+            <BookIcon fontSize="small" />
           </Avatar>
           <Box>
             <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
@@ -182,48 +115,50 @@ const SubjectsList = () => {
         </Box>
       ),
     },
-    {
+ /*   {
       field: 'coefficient',
-      headerName: 'Coefficient',
-      width: 120,
+      headerName: 'Coeff. Base',
+      width: 130,
       render: (value) => (
         <Chip
-          label={`Coeff. ${value}`}
+          label={`Coeff. ${value || 1}`} // ✅ Correction : Affiche 1 par défaut si la valeur est nulle
           size="small"
-          color="primary"
-          icon={<NumbersIcon />}
+          color="secondary"
           variant="outlined"
+          icon={<NumbersIcon sx={{ fontSize: '14px !important' }} />}
+        />
+      ),
+    },*/
+    {
+      field: 'subjectClasses', // ✅ Alias correspondant à ton fichier index.js
+      headerName: 'Classes',
+      width: 140,
+      render: (value) => (
+        <Chip 
+          label={`${Array.isArray(value) ? value.length : 0} classe(s)`}
+          size="small"
+          variant="contained"
+          sx={{ bgcolor: 'grey.100' }}
         />
       ),
     },
     {
-      field: 'classes',
-      headerName: 'Classes',
-      width: 150,
-      render: (value) => (
-        <Typography>
-          {Array.isArray(value) ? value.length : 0} classe(s)
-        </Typography>
-      ),
-    },
-    {
-      field: 'teachers',
+      field: 'subjectTeachers', // ✅ Alias correspondant à ton fichier index.js
       headerName: 'Enseignants',
-      width: 150,
-      render: (value) => (
-        <Typography>
-          {Array.isArray(value) ? value.length : 0} enseignant(s)
-        </Typography>
-      ),
-    },
-    {
-      field: 'createdAt',
-      headerName: 'Créée le',
-      width: 150,
-      type: 'date',
+      width: 140,
       render: (value) => (
         <Typography variant="body2">
-          {new Date(value).toLocaleDateString('fr-FR')}
+          {Array.isArray(value) ? value.length : 0} prof(s).
+        </Typography>
+      ),
+    },
+    {
+      field: 'created_at',
+      headerName: 'Date Création',
+      width: 150,
+      render: (value) => (
+        <Typography variant="body2" color="textSecondary">
+          {value ? new Date(value).toLocaleDateString('fr-FR') : 'N/A'}
         </Typography>
       ),
     },
@@ -236,7 +171,7 @@ const SubjectsList = () => {
   return (
     <>
       <Helmet>
-        <title>Matières - Administration</title>
+        <title>Matières | Administration</title>
       </Helmet>
 
       <Box sx={{ mb: 4 }}>
@@ -253,7 +188,7 @@ const SubjectsList = () => {
               Gestion des Matières
             </Typography>
             <Typography variant="body1" color="textSecondary">
-              {subjects.length} matière(s) enregistrée(s)
+              {subjects.length} matière(s) configurée(s) au total
             </Typography>
           </Box>
           
@@ -261,51 +196,34 @@ const SubjectsList = () => {
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => navigate('/admin/subjects/new')}
-            sx={{ 
-              background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
-              '&:hover': {
-                background: 'linear-gradient(45deg, #1565c0, #1976d2)',
-              },
-            }}
+            sx={{ borderRadius: 2, px: 3 }}
           >
-            Nouvelle Matière
+            Créer une matière
           </Button>
         </Box>
 
-        <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
+        <Paper sx={{ p: 2, mb: 3, borderRadius: 2, boxShadow: theme.shadows[2] }}>
           <Grid container spacing={2} alignItems="center">
             <Grid item xs={12} md={6}>
               <TextField
                 fullWidth
-                placeholder="Rechercher une matière..."
+                placeholder="Rechercher par nom ou code..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 InputProps={{
                   startAdornment: (
                     <InputAdornment position="start">
-                      <SearchIcon />
+                      <SearchIcon color="action" />
                     </InputAdornment>
                   ),
                 }}
                 size="small"
               />
             </Grid>
-            <Grid item xs={12} md={6}>
-              <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
-                <Button
-                  startIcon={<FilterIcon />}
-                  variant="outlined"
-                  disabled
-                >
-                  Filtres
-                </Button>
-                <Button
-                  onClick={fetchSubjects}
-                  variant="outlined"
-                >
-                  Actualiser
-                </Button>
-              </Box>
+            <Grid item xs={12} md={6} sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <IconButton onClick={fetchSubjects} color="primary" title="Actualiser">
+                <RefreshIcon />
+              </IconButton>
             </Grid>
           </Grid>
         </Paper>
@@ -315,80 +233,78 @@ const SubjectsList = () => {
         <Grid container spacing={2}>
           {filteredSubjects.map((subject) => (
             <Grid item xs={12} key={subject.id}>
-              <Card>
+              <Card sx={{ borderRadius: 2 }}>
                 <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Avatar sx={{ bgcolor: 'primary.main' }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2 }}>
+                    <Box sx={{ display: 'flex', gap: 1.5 }}>
+                      <Avatar sx={{ bgcolor: 'primary.light', width: 40, height: 40 }}>
                         <BookIcon />
                       </Avatar>
                       <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
                           {subject.name}
                         </Typography>
-                        <Typography variant="body2" color="textSecondary">
-                          Code: {subject.code} • Coeff. {subject.coefficient}
+                        <Typography variant="caption" display="block" color="textSecondary">
+                          CODE: {subject.code}
                         </Typography>
                       </Box>
                     </Box>
                     <Chip
-                      label={`Coeff. ${subject.coefficient}`}
+                      label={`Coeff. ${subject.coefficient || 1}`}
                       size="small"
-                      color="primary"
+                      color="secondary"
                     />
                   </Box>
                   
-                  <Grid container spacing={2} sx={{ mb: 2 }}>
-                    <Grid item xs={6}>
-                      <Typography variant="body2" color="textSecondary">
-                        Classes:
-                      </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {Array.isArray(subject.classes) ? subject.classes.length : 0}
-                      </Typography>
-                    </Grid>
-                    <Grid item xs={6}>
-                      <Typography variant="body2" color="textSecondary">
-                        Enseignants:
-                      </Typography>
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {Array.isArray(subject.teachers) ? subject.teachers.length : 0}
-                      </Typography>
-                    </Grid>
-                  </Grid>
+                  <Divider sx={{ my: 1.5 }} />
+                  
+                  <Box sx={{ display: 'flex', justifyContent: 'space-around', textAlign: 'center', mb: 2 }}>
+                    <Box>
+                      <Typography variant="h6" color="primary">{Array.isArray(subject.subjectClasses) ? subject.subjectClasses.length : 0}</Typography>
+                      <Typography variant="caption" color="textSecondary">Classes</Typography>
+                    </Box>
+                    <Box>
+                      <Typography variant="h6" color="primary">{Array.isArray(subject.subjectTeachers) ? subject.subjectTeachers.length : 0}</Typography>
+                      <Typography variant="caption" color="textSecondary">Profs</Typography>
+                    </Box>
+                  </Box>
 
-                  <Box sx={{ display: 'flex', gap: 1, mt: 2 }}>
-                    <Button
-                      size="small"
-                      startIcon={<VisibilityIcon />}
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button 
+                      variant="outlined" 
+                      size="small" 
+                      fullWidth 
                       onClick={() => handleView(subject)}
-                      fullWidth
                     >
-                      Voir
+                      Détails
                     </Button>
-                    <Button
-                      size="small"
-                      startIcon={<EditIcon />}
+                    <Button 
+                      variant="contained" 
+                      size="small" 
+                      fullWidth 
                       onClick={() => handleEdit(subject)}
-                      color="primary"
-                      fullWidth
                     >
                       Modifier
                     </Button>
-                    <Button
-                      size="small"
-                      startIcon={<DeleteIcon />}
+                    <IconButton 
+                      color="error" 
+                      size="small" 
                       onClick={() => handleDelete(subject)}
-                      color="error"
-                      fullWidth
                     >
-                      Supprimer
-                    </Button>
+                      <DeleteIcon />
+                    </IconButton>
                   </Box>
                 </CardContent>
               </Card>
             </Grid>
           ))}
+          {filteredSubjects.length === 0 && (
+            <Grid item xs={12}>
+              <Paper sx={{ p: 5, textAlign: 'center' }}>
+                <Typography color="textSecondary">Aucune matière trouvée</Typography>
+              </Paper>
+            </Grid>
+          )}
         </Grid>
       ) : (
         <DataTable
@@ -397,8 +313,7 @@ const SubjectsList = () => {
           onEdit={handleEdit}
           onDelete={handleDelete}
           onView={handleView}
-          searchable={false}
-          title={`Liste des matières (${filteredSubjects.length})`}
+          searchable={false} // On utilise notre propre barre de recherche au-dessus
         />
       )}
 
@@ -406,23 +321,22 @@ const SubjectsList = () => {
       <Dialog
         open={Boolean(deleteDialog)}
         onClose={() => setDeleteDialog(null)}
-        maxWidth="sm"
+        maxWidth="xs"
         fullWidth
       >
-        <DialogTitle>Confirmer la suppression</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 700 }}>Supprimer la matière ?</DialogTitle>
         <DialogContent>
-          <Typography>
-            Êtes-vous sûr de vouloir supprimer la matière{' '}
-            <strong>{deleteDialog?.name}</strong> ?
+          <Typography variant="body1">
+            Voulez-vous vraiment supprimer la matière <strong>{deleteDialog?.name}</strong> ?
           </Typography>
-          <Typography variant="body2" color="error" sx={{ mt: 2 }}>
-            Attention: Cette action affectera toutes les classes et notes associées à cette matière.
+          <Typography variant="body2" color="error" sx={{ mt: 2, p: 1, bgcolor: 'error.lighter', borderRadius: 1 }}>
+            Attention : Cette action est irréversible et pourrait échouer si des notes sont déjà enregistrées.
           </Typography>
         </DialogContent>
-        <DialogActions>
+        <DialogActions sx={{ p: 2 }}>
           <Button onClick={() => setDeleteDialog(null)}>Annuler</Button>
           <Button onClick={confirmDelete} color="error" variant="contained">
-            Supprimer
+            Confirmer la suppression
           </Button>
         </DialogActions>
       </Dialog>

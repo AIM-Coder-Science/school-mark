@@ -58,7 +58,7 @@ const TeachersList = () => {
   const fetchTeachers = async () => {
     try {
       setLoading(true);
-      const response = await adminAPI.getTeachers();
+      const response = await adminAPI.getAllTeachers();
       setTeachers(response.data.data || []);
     } catch (error) {
       toast.error('Erreur lors du chargement des enseignants');
@@ -152,13 +152,16 @@ const TeachersList = () => {
       ),
     },
     {
-      field: 'classes',
-      headerName: 'Classes',
-      width: 150,
-      render: (value) => (
-        <Typography>
-          {Array.isArray(value) ? value.length : 0} classe(s)
-        </Typography>
+        field: 'assignedClasses',
+        headerName: 'Affectations',
+        width: 150,
+        render: (value) => (
+        <Chip 
+            label={`${value?.length || 0} classe(s)`} 
+            size="small" 
+            color="primary" 
+            variant="outlined" 
+        />
       ),
     },
     {

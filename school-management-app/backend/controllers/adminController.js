@@ -106,13 +106,8 @@ const createTeacher = async (req, res) => {
                 },
                 {
                     model: Class,
-                    as: 'classes',
-                    through: { attributes: [] },
-                    include: [{
-                        model: Subject,
-                        as: 'subjects',
-                        through: { attributes: [] }
-                    }]
+                    as: 'assignedClasses',
+                    through: { attributes: [] }
                 }
             ]
         });
@@ -268,10 +263,13 @@ const createStudent = async (req, res) => {
 // @route   POST /api/admin/classes
 // @access  Privé (Admin)
 const createClass = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
     try {
-        const { name, level, teacherPrincipalId, subjects } = req.body;
+        const { name, level, teacherPrincipalId, subjects, coefficients } = req.body;
 
         if (!name || !level) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: 'Veuillez fournir le nom et le niveau de la classe'
@@ -280,8 +278,9 @@ const createClass = async (req, res) => {
 
         // Vérifier si le professeur principal existe (si fourni)
         if (teacherPrincipalId) {
-            const teacher = await Teacher.findByPk(teacherPrincipalId);
+            const teacher = await Teacher.findByPk(teacherPrincipalId, { transaction });
             if (!teacher) {
+                await transaction.rollback();
                 return res.status(404).json({
                     success: false,
                     message: 'Enseignant principal non trouvé'
@@ -295,17 +294,25 @@ const createClass = async (req, res) => {
             level,
             teacherPrincipalId: teacherPrincipalId || null,
             createdBy: req.user.id
-        });
+        }, { transaction });
 
-        // Assigner les matières à la classe si fournies
-        if (subjects && Array.isArray(subjects)) {
+        // Assigner les matières avec leurs coefficients
+        if (subjects && Array.isArray(subjects) && subjects.length > 0) {
             for (const subjectId of subjects) {
-                const subject = await Subject.findByPk(subjectId);
+                const subject = await Subject.findByPk(subjectId, { transaction });
                 if (subject) {
-                    await newClass.addSubject(subject);
+                    // Créer une entrée avec le coefficient
+                    await TeacherClassSubject.create({
+                        teacherId: null, // Pas d'enseignant assigné pour l'instant
+                        classId: newClass.id,
+                        subjectId: subjectId,
+                        coefficient: coefficients?.[subjectId] || 1 // Utiliser le coefficient fourni ou 1 par défaut
+                    }, { transaction });
                 }
             }
         }
+
+        await transaction.commit();
 
         // Récupérer la classe avec les détails
         const classWithDetails = await Class.findByPk(newClass.id, {
@@ -317,8 +324,10 @@ const createClass = async (req, res) => {
                 },
                 {
                     model: Subject,
-                    as: 'subjects',
-                    through: { attributes: [] }
+                    as: 'classSubjects',
+                    through: { 
+                        attributes: ['coefficient'] // Inclure le coefficient
+                    }
                 }
             ]
         });
@@ -329,10 +338,228 @@ const createClass = async (req, res) => {
             data: classWithDetails
         });
     } catch (error) {
+        await transaction.rollback();
         console.error('Erreur création classe:', error);
         res.status(500).json({
             success: false,
             message: 'Erreur serveur lors de la création de la classe'
+        });
+    }
+};
+
+// @desc    Obtenir une classe par ID
+// @route   GET /api/admin/classes/:classId
+// @access  Privé (Admin)
+const getClass = async (req, res) => {
+    try {
+        const { classId } = req.params;
+
+        const classItem = await Class.findByPk(classId, {
+            include: [
+                {
+                    model: Teacher,
+                    as: 'principalTeacher',
+                    attributes: ['id', 'firstName', 'lastName', 'matricule']
+                },
+                {
+                    model: Subject,
+                    as: 'classSubjects',
+                    through: { attributes: [] }
+                },
+                {
+                    model: Student,
+                    as: 'students',
+                    attributes: ['id', 'firstName', 'lastName', 'matricule']
+                },
+                {
+                    model: Teacher,
+                    as: 'classTeachers',
+                    through: { attributes: [] },
+                    attributes: ['id', 'firstName', 'lastName', 'matricule']
+                }
+            ]
+        });
+
+        if (!classItem) {
+            return res.status(404).json({
+                success: false,
+                message: 'Classe non trouvée'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: classItem
+        });
+    } catch (error) {
+        console.error('Erreur récupération classe:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur'
+        });
+    }
+};
+
+// @desc    Mettre à jour une classe
+// @route   PUT /api/admin/classes/:classId
+// @access  Privé (Admin)
+const updateClass = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+        const { classId } = req.params;
+        const { name, level, teacherPrincipalId, subjects, coefficients } = req.body;
+
+        const classItem = await Class.findByPk(classId, { transaction });
+        
+        if (!classItem) {
+            await transaction.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Classe non trouvée'
+            });
+        }
+
+        // Vérifier le professeur principal si fourni
+        if (teacherPrincipalId) {
+            const teacher = await Teacher.findByPk(teacherPrincipalId, { transaction });
+            if (!teacher) {
+                await transaction.rollback();
+                return res.status(404).json({
+                    success: false,
+                    message: 'Enseignant principal non trouvé'
+                });
+            }
+        }
+
+        // Mettre à jour les champs
+        if (name) classItem.name = name;
+        if (level) classItem.level = level;
+        if (teacherPrincipalId !== undefined) {
+            classItem.teacherPrincipalId = teacherPrincipalId || null;
+        }
+
+        await classItem.save({ transaction });
+
+        // Mettre à jour les matières avec leurs coefficients
+        if (subjects && Array.isArray(subjects)) {
+            // Supprimer les anciennes associations (sans teacherId)
+            await TeacherClassSubject.destroy({
+                where: {
+                    classId: classId,
+                    teacherId: null
+                },
+                transaction
+            });
+
+            // Ajouter les nouvelles associations avec coefficients
+            for (const subjectId of subjects) {
+                const subject = await Subject.findByPk(subjectId, { transaction });
+                if (subject) {
+                    await TeacherClassSubject.create({
+                        teacherId: null,
+                        classId: classId,
+                        subjectId: subjectId,
+                        coefficient: coefficients?.[subjectId] || 1
+                    }, { transaction });
+                }
+            }
+        }
+
+        await transaction.commit();
+
+        // Récupérer la classe mise à jour avec les détails
+        const updatedClass = await Class.findByPk(classId, {
+            include: [
+                {
+                    model: Teacher,
+                    as: 'principalTeacher',
+                    attributes: ['id', 'firstName', 'lastName', 'matricule']
+                },
+                {
+                    model: Subject,
+                    as: 'classSubjects',
+                    through: { 
+                        attributes: ['coefficient']
+                    }
+                },
+                {
+                    model: Student,
+                    as: 'students',
+                    attributes: ['id', 'firstName', 'lastName', 'matricule']
+                }
+            ]
+        });
+
+        res.json({
+            success: true,
+            message: 'Classe mise à jour avec succès',
+            data: updatedClass
+        });
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Erreur mise à jour classe:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur'
+        });
+    }
+};
+
+// @desc    Supprimer une classe
+// @route   DELETE /api/admin/classes/:classId
+// @access  Privé (Admin)
+const deleteClass = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+        const { classId } = req.params;
+
+        const classItem = await Class.findByPk(classId, { transaction });
+        
+        if (!classItem) {
+            await transaction.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Classe non trouvée'
+            });
+        }
+
+        // Vérifier s'il y a des étudiants dans cette classe
+        const studentsCount = await Student.count({
+            where: { classId },
+            transaction
+        });
+
+        if (studentsCount > 0) {
+            await transaction.rollback();
+            return res.status(400).json({
+                success: false,
+                message: `Impossible de supprimer cette classe. Elle contient ${studentsCount} étudiant(s). Veuillez d'abord réassigner ou supprimer les étudiants.`
+            });
+        }
+
+        // Supprimer les associations dans TeacherClassSubject
+        await TeacherClassSubject.destroy({
+            where: { classId },
+            transaction
+        });
+
+        // Supprimer la classe
+        await classItem.destroy({ transaction });
+
+        await transaction.commit();
+
+        res.json({
+            success: true,
+            message: 'Classe supprimée avec succès'
+        });
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Erreur suppression classe:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur lors de la suppression'
         });
     }
 };
@@ -342,7 +569,7 @@ const createClass = async (req, res) => {
 // @access  Privé (Admin)
 const createSubject = async (req, res) => {
     try {
-        const { name, code, coefficient } = req.body;
+        const { name, code, coefficient, description } = req.body;
 
         if (!name || !code) {
             return res.status(400).json({
@@ -368,6 +595,7 @@ const createSubject = async (req, res) => {
             name,
             code,
             coefficient: coefficient || 1,
+            description: description || null,
             createdBy: req.user.id
         });
 
@@ -381,6 +609,227 @@ const createSubject = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Erreur serveur lors de la création de la matière'
+        });
+    }
+};
+
+// @desc    Obtenir toutes les matières
+// @route   GET /api/admin/subjects
+// @access  Privé (Admin)
+const getAllSubjects = async (req, res) => {
+    try {
+        const subjects = await Subject.findAll({
+            include: [
+                {
+                    model: Class,
+                    as: 'subjectClasses',
+                    through: { attributes: [] },
+                    attributes: ['id', 'name', 'level']
+                },
+                {
+                    model: Teacher,
+                    as: 'subjectTeachers',
+                    through: { attributes: [] },
+                    attributes: ['id', 'firstName', 'lastName', 'matricule']
+                }
+            ],
+            order: [['name', 'ASC']]
+        });
+
+        res.json({
+            success: true,
+            count: subjects.length,
+            data: subjects
+        });
+    } catch (error) {
+        console.error('Erreur récupération matières:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur'
+        });
+    }
+};
+
+// @desc    Obtenir une matière par ID
+// @route   GET /api/admin/subjects/:subjectId
+// @access  Privé (Admin)
+const getSubject = async (req, res) => {
+    try {
+        const { subjectId } = req.params;
+
+        const subject = await Subject.findByPk(subjectId, {
+            include: [
+                {
+                    model: Class,
+                    as: 'subjectClasses',
+                    through: { attributes: [] },
+                    attributes: ['id', 'name', 'level']
+                },
+                {
+                    model: Teacher,
+                    as: 'subjectTeachers',
+                    through: { attributes: [] },
+                    attributes: ['id', 'firstName', 'lastName', 'matricule']
+                }
+            ]
+        });
+
+        if (!subject) {
+            return res.status(404).json({
+                success: false,
+                message: 'Matière non trouvée'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: subject
+        });
+    } catch (error) {
+        console.error('Erreur récupération matière:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur'
+        });
+    }
+};
+
+// @desc    Mettre à jour une matière
+// @route   PUT /api/admin/subjects/:subjectId
+// @access  Privé (Admin)
+const updateSubject = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+        const { subjectId } = req.params;
+        const { name, code, coefficient, description } = req.body;
+
+        const subject = await Subject.findByPk(subjectId, { transaction });
+        
+        if (!subject) {
+            await transaction.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Matière non trouvée'
+            });
+        }
+
+        // Vérifier si le code existe déjà (pour un autre sujet)
+        if (code && code !== subject.code) {
+            const existingSubject = await Subject.findOne({
+                where: { 
+                    code,
+                    id: { [Op.ne]: subjectId }
+                },
+                transaction
+            });
+
+            if (existingSubject) {
+                await transaction.rollback();
+                return res.status(400).json({
+                    success: false,
+                    message: 'Une autre matière avec ce code existe déjà'
+                });
+            }
+        }
+
+        // Mettre à jour les champs
+        if (name) subject.name = name;
+        if (code) subject.code = code;
+        if (coefficient !== undefined) subject.coefficient = coefficient;
+        if (description !== undefined) subject.description = description;
+
+        await subject.save({ transaction });
+        await transaction.commit();
+
+        // Récupérer la matière mise à jour avec les détails
+        const updatedSubject = await Subject.findByPk(subjectId, {
+            include: [
+                {
+                    model: Class,
+                    as: 'subjectClasses',
+                    through: { attributes: [] },
+                    attributes: ['id', 'name', 'level']
+                },
+                {
+                    model: Teacher,
+                    as: 'subjectTeachers',
+                    through: { attributes: [] },
+                    attributes: ['id', 'firstName', 'lastName', 'matricule']
+                }
+            ]
+        });
+
+        res.json({
+            success: true,
+            message: 'Matière mise à jour avec succès',
+            data: updatedSubject
+        });
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Erreur mise à jour matière:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur'
+        });
+    }
+};
+
+// @desc    Supprimer une matière
+// @route   DELETE /api/admin/subjects/:subjectId
+// @access  Privé (Admin)
+const deleteSubject = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+        const { subjectId } = req.params;
+
+        const subject = await Subject.findByPk(subjectId, { transaction });
+        
+        if (!subject) {
+            await transaction.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Matière non trouvée'
+            });
+        }
+
+        // Vérifier s'il y a des notes associées à cette matière
+        const Grade = require('../models').Grade;
+        const gradesCount = await Grade.count({
+            where: { subjectId },
+            transaction
+        });
+
+        if (gradesCount > 0) {
+            await transaction.rollback();
+            return res.status(400).json({
+                success: false,
+                message: `Impossible de supprimer cette matière. Elle contient ${gradesCount} note(s). Veuillez d'abord supprimer les notes associées.`
+            });
+        }
+
+        // Supprimer les associations dans TeacherClassSubject
+        await TeacherClassSubject.destroy({
+            where: { subjectId },
+            transaction
+        });
+
+        // Supprimer la matière
+        await subject.destroy({ transaction });
+
+        await transaction.commit();
+
+        res.json({
+            success: true,
+            message: 'Matière supprimée avec succès'
+        });
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Erreur suppression matière:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur lors de la suppression'
         });
     }
 };
@@ -575,7 +1024,7 @@ const getStats = async (req, res) => {
             order: [['id', 'DESC']],
             include: [{
                 model: Class,
-                as: 'classes',
+                as: 'assignedClasses',
                 through: { attributes: [] },
                 attributes: ['name', 'level']
             }]
@@ -614,6 +1063,109 @@ const getStats = async (req, res) => {
     }
 };
 
+
+// @desc    Obtenir un enseignant par ID
+// @route   GET /api/admin/teachers/:id
+/*const getTeacher = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // On récupère l'enseignant avec ses relations (User et Classes)
+    const teacher = await Teacher.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['email', 'isActive']
+        },
+        {
+          model: Class,
+          as: 'assignedClasses', // Doit correspondre à l'alias de ton modèle
+          through: { attributes: [] }, // Masquer la table de liaison
+          include: [{
+            model: Subject,
+            // Si tu as une relation via TeacherClassSubject, ajuste ici
+          }]
+        }
+      ]
+    });
+
+    if (!teacher) {
+      return res.status(404).json({
+        success: false,
+        message: 'Enseignant non trouvé'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: teacher
+    });
+  } catch (error) {
+    console.error('Erreur getTeacher:', error);
+    res.status(500).json({ success: false, message: 'Erreur serveur' });
+  }
+};
+*/
+
+const getTeacher = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Version simplifiée pour déboguer
+    const teacher = await Teacher.findByPk(id, {
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'email', 'isActive', 'createdAt']
+        },
+        {
+          model: Class,
+          as: 'assignedClasses',
+          attributes: ['id', 'name', 'level', 'academicYear'],
+          through: { attributes: [] }
+        }
+      ]
+    });
+
+    if (!teacher) {
+      return res.status(404).json({
+        success: false,
+        message: 'Enseignant non trouvé'
+      });
+    }
+
+    // Récupérer les matières séparément
+    const subjects = await Subject.findAll({
+      include: [{
+        model: Teacher,
+        as: 'subjectTeachers',
+        where: { id: teacher.id },
+        attributes: []
+      }],
+      attributes: ['id', 'name']
+    });
+
+    const response = {
+      ...teacher.toJSON(),
+      teacherSubjects: subjects
+    };
+
+    res.json({
+      success: true,
+      data: response
+    });
+  } catch (error) {
+    console.error('Erreur getTeacher:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Erreur serveur',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
 // @desc    Obtenir tous les enseignants
 // @route   GET /api/admin/teachers
 // @access  Privé (Admin)
@@ -628,13 +1180,8 @@ const getAllTeachers = async (req, res) => {
                 },
                 {
                     model: Class,
-                    as: 'classes',
-                    through: { attributes: [] },
-                    include: [{
-                        model: Subject,
-                        as: 'subjects',
-                        through: { attributes: [] }
-                    }]
+                    as: 'assignedClasses',
+                    through: { attributes: [] }
                 },
                 {
                     model: Class,
@@ -655,6 +1202,84 @@ const getAllTeachers = async (req, res) => {
         res.status(500).json({
             success: false,
             message: 'Erreur serveur'
+        });
+    }
+};
+
+// @desc    Mettre à jour un enseignant
+// @route   PUT /api/admin/teachers/:id
+const updateTeacher = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    try {
+        const { id } = req.params;
+        const { 
+            firstName, 
+            lastName, 
+            phone, 
+            specialties,
+            classes // Array: [{ classId, subjectId }]
+        } = req.body;
+
+        // 1. Vérifier si l'enseignant existe
+        const teacher = await Teacher.findByPk(id, { transaction });
+        if (!teacher) {
+            await transaction.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Enseignant non trouvé'
+            });
+        }
+
+        // 2. Mettre à jour les infos de base
+        await teacher.update({
+            firstName: firstName || teacher.firstName,
+            lastName: lastName || teacher.lastName,
+            phone: phone || teacher.phone,
+            specialties: specialties || teacher.specialties
+        }, { transaction });
+
+        // 3. Gestion des affectations (Classes/Matières)
+        // Si le tableau classes est fourni, on remplace les anciennes affectations
+        if (classes && Array.isArray(classes)) {
+            // Supprimer les anciennes affectations dans la table de liaison
+            await TeacherClassSubject.destroy({
+                where: { teacherId: id },
+                transaction
+            });
+
+            // Insérer les nouvelles affectations
+            if (classes.length > 0) {
+                const assignments = classes.map(cls => ({
+                    teacherId: id,
+                    classId: cls.classId,
+                    subjectId: cls.subjectId
+                }));
+                await TeacherClassSubject.bulkCreate(assignments, { transaction });
+            }
+        }
+
+        await transaction.commit();
+
+        // Récupérer l'enseignant mis à jour avec ses relations pour la réponse
+        const updatedTeacher = await Teacher.findByPk(id, {
+            include: [
+                { model: User, as: 'user', attributes: ['email', 'isActive'] },
+                { model: Class, as: 'assignedClasses' }
+            ]
+        });
+
+        res.json({
+            success: true,
+            message: 'Enseignant mis à jour avec succès',
+            data: updatedTeacher
+        });
+
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Erreur updateTeacher:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur lors de la mise à jour de l\'enseignant'
         });
     }
 };
@@ -716,8 +1341,10 @@ const getAllClasses = async (req, res) => {
                 },
                 {
                     model: Subject,
-                    as: 'subjects',
-                    through: { attributes: [] }
+                    as: 'classSubjects',
+                    through: { 
+                        attributes: ['coefficient'] // Inclure le coefficient
+                    }
                 },
                 {
                     model: Student,
@@ -726,7 +1353,7 @@ const getAllClasses = async (req, res) => {
                 },
                 {
                     model: Teacher,
-                    as: 'teachers',
+                    as: 'classTeachers',
                     through: { attributes: [] },
                     attributes: ['id', 'firstName', 'lastName', 'matricule']
                 }
@@ -747,6 +1374,7 @@ const getAllClasses = async (req, res) => {
         });
     }
 };
+
 
 // @desc    Mettre à jour un utilisateur
 // @route   PUT /api/admin/users/:userId
@@ -834,17 +1462,58 @@ const deleteUser = async (req, res) => {
     }
 };
 
+const deleteTeacher = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Vérifier si l'enseignant existe
+    const teacher = await Teacher.findByPk(id);
+    if (!teacher) {
+      return res.status(404).json({
+        success: false,
+        message: 'Enseignant non trouvé'
+      });
+    }
+
+    // Si l'enseignant est associé à un utilisateur, vous voudrez peut-être
+    // aussi gérer la suppression de l'utilisateur
+    await teacher.destroy();
+
+    res.json({
+      success: true,
+      message: 'Enseignant supprimé avec succès'
+    });
+  } catch (error) {
+    console.error('Erreur deleteTeacher:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Erreur serveur',
+      error: error.message 
+    });
+  }
+};
+
 module.exports = {
     createTeacher,
     createStudent,
     createClass,
+    getClass,
+    updateClass,
+    deleteClass,
     createSubject,
+    getAllSubjects,
+    getSubject,
+    updateSubject,
+    deleteSubject,
     assignClassPrincipal,
     createPublication,
     getStats,
     getAllTeachers,
+    getTeacher,
+    updateTeacher,
     getAllStudents,
     getAllClasses,
     updateUser,
-    deleteUser
+    deleteUser,
+    deleteTeacher,
 };

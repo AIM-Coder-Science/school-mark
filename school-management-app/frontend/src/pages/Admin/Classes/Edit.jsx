@@ -27,7 +27,7 @@ import {
   Remove as RemoveIcon,
 } from '@mui/icons-material';
 import { Helmet } from 'react-helmet-async';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
@@ -35,9 +35,11 @@ import { adminAPI } from '../../../services/api';
 import toast from 'react-hot-toast';
 import Loader from '../../../components/common/Loader';
 
-const CreateClass = () => {
+const EditClass = () => {
   const navigate = useNavigate();
+  const { classId } = useParams();
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [teachers, setTeachers] = useState([]);
   const [subjects, setSubjects] = useState([]);
   const [selectedSubjects, setSelectedSubjects] = useState({});
@@ -53,6 +55,7 @@ const CreateClass = () => {
     control,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm({
     resolver: yupResolver(schema),
@@ -65,24 +68,48 @@ const CreateClass = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [classId]);
 
   const fetchData = async () => {
     try {
-      setLoading(true);
-      const [teachersRes, subjectsRes] = await Promise.all([
-        adminAPI.getTeachers(),
-        adminAPI.getSubjects(),
+      setInitialLoading(true);
+      
+      const [classRes, teachersRes, subjectsRes] = await Promise.all([
+        adminAPI.getClass(classId),
+        adminAPI.getAllTeachers(),
+        adminAPI.getAllSubjects(),
       ]);
+
+      const classData = classRes.data.data;
+      
+      // Pré-remplir le formulaire
+      setValue('name', classData.name);
+      setValue('level', classData.level);
+      setValue('teacherPrincipalId', classData.teacherPrincipalId || '');
+
+      // Récupérer les matières avec leurs coefficients
+      const subjectsWithCoeffs = {};
+      if (Array.isArray(classData.classSubjects)) {
+        classData.classSubjects.forEach(subject => {
+          // Le coefficient vient de la table de jointure
+          const coeff = subject.TeacherClassSubject?.coefficient || 
+                       subject.ClassSubject?.coefficient || 
+                       1;
+          subjectsWithCoeffs[subject.id] = coeff;
+        });
+      }
+      
+      setSelectedSubjects(subjectsWithCoeffs);
 
       setTeachers(teachersRes.data.data || []);
       setSubjects(subjectsRes.data.data || []);
       setAvailableTeachers(teachersRes.data.data || []);
     } catch (error) {
-      console.error('Erreur chargement:', error);
+      console.error('Erreur chargement données:', error);
       toast.error('Erreur lors du chargement des données');
+      navigate('/admin/classes');
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
   };
 
@@ -133,34 +160,29 @@ const CreateClass = () => {
         level: data.level,
         teacherPrincipalId: data.teacherPrincipalId || null,
         subjects: Object.keys(selectedSubjects).map(id => parseInt(id)),
-        coefficients: selectedSubjects, // Envoyer les coefficients aussi
+        coefficients: selectedSubjects,
       };
 
-      await adminAPI.createClass(classData);
+      await adminAPI.updateClass(classId, classData);
       
-      toast.success('Classe créée avec succès !');
-      
-      if (data.teacherPrincipalId) {
-        toast.success('Professeur principal assigné');
-      }
-      
+      toast.success('Classe mise à jour avec succès !');
       navigate('/admin/classes');
     } catch (error) {
-      console.error('Erreur:', error);
-      toast.error(error.response?.data?.message || 'Erreur lors de la création');
+      console.error('Erreur mise à jour:', error);
+      toast.error(error.response?.data?.message || 'Erreur lors de la mise à jour');
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading && !teachers.length && !subjects.length) {
+  if (initialLoading) {
     return <Loader />;
   }
 
   return (
     <>
       <Helmet>
-        <title>Nouvelle Classe - Administration</title>
+        <title>Modifier la classe - Administration</title>
       </Helmet>
 
       <Box sx={{ mb: 4 }}>
@@ -170,10 +192,10 @@ const CreateClass = () => {
           </IconButton>
           <Box>
             <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
-              Créer une nouvelle classe
+              Modifier la classe
             </Typography>
             <Typography variant="body1" color="textSecondary">
-              Ajoutez une nouvelle classe au système
+              Modifiez les informations de la classe
             </Typography>
           </Box>
         </Box>
@@ -512,7 +534,7 @@ const CreateClass = () => {
                       },
                     }}
                   >
-                    {loading ? 'Création...' : 'Créer la classe'}
+                    {loading ? 'Enregistrement...' : 'Enregistrer les modifications'}
                   </Button>
                 </Box>
               </Grid>
@@ -524,4 +546,4 @@ const CreateClass = () => {
   );
 };
 
-export default CreateClass;
+export default EditClass;

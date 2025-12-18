@@ -9,6 +9,15 @@ const TeacherClassSubject = sequelize.define('TeacherClassSubject', {
         type: DataTypes.INTEGER,
         primaryKey: true,
         autoIncrement: true
+    },
+    coefficient: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 1,
+        validate: {
+            min: 1,
+            max: 10
+        }
     }
 }, {
     tableName: 'teacher_class_subject',

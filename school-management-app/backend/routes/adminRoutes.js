@@ -13,8 +13,18 @@ const {
     getAllTeachers,
     getAllStudents,
     getAllClasses,
+    getAllSubjects,
+    getClass,
+    getSubject,
+    updateClass,
+    updateSubject,
+    updateTeacher,
+    deleteClass,
+    deleteSubject,
     updateUser,
-    deleteUser
+    deleteUser,
+    getTeacher,
+    deleteTeacher,
 } = require('../controllers/adminController');
 
 // Toutes les routes sont protégées et nécessitent le rôle admin
@@ -26,6 +36,11 @@ router.route('/teachers')
     .post(createTeacher)
     .get(getAllTeachers);
 
+router.route('/teachers/:id')
+    .get(getTeacher)
+    .put(updateTeacher)
+    .delete(deleteTeacher); 
+
 // Routes pour les apprenants
 router.route('/students')
     .post(createStudent)
@@ -36,10 +51,22 @@ router.route('/classes')
     .post(createClass)
     .get(getAllClasses);
 
+router.route('/classes/:classId')
+    .get(getClass)
+    .put(updateClass)
+    .delete(deleteClass);
+
 router.put('/classes/:classId/principal', assignClassPrincipal);
 
 // Routes pour les matières
-router.post('/subjects', createSubject);
+router.route('/subjects')
+    .post(createSubject)
+    .get(getAllSubjects);
+
+router.route('/subjects/:subjectId')
+    .get(getSubject)
+    .put(updateSubject)
+    .delete(deleteSubject);
 
 // Routes pour les publications
 router.post('/publications', createPublication);

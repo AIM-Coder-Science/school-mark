@@ -22,7 +22,8 @@ const Subject = sequelize.define('Subject', {
         defaultValue: 1,
         validate: {
             min: 1
-        }
+        },
+        allowNull: false
     }
 }, {
     tableName: 'subjects',

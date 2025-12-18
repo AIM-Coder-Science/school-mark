@@ -50,6 +50,7 @@ const ClassesList = () => {
   const [search, setSearch] = useState('');
   const [deleteDialog, setDeleteDialog] = useState(null);
   const [filterAnchor, setFilterAnchor] = useState(null);
+  const [menuAnchor, setMenuAnchor] = useState(null);
   const [selectedLevel, setSelectedLevel] = useState('all');
   const [selectedClass, setSelectedClass] = useState(null);
 
@@ -61,8 +62,10 @@ const ClassesList = () => {
     try {
       setLoading(true);
       const response = await adminAPI.getClasses();
+      console.log('Classes reçues:', response.data.data);
       setClasses(response.data.data || []);
     } catch (error) {
+      console.error('Erreur chargement classes:', error);
       toast.error('Erreur lors du chargement des classes');
     } finally {
       setLoading(false);
@@ -83,14 +86,13 @@ const ClassesList = () => {
 
   const confirmDelete = async () => {
     try {
-      // Note: Vous devrez créer un endpoint pour supprimer les classes
-      // await adminAPI.deleteClass(deleteDialog.id);
+      await adminAPI.deleteClass(deleteDialog.id);
       toast.success('Classe supprimée avec succès');
-      fetchClasses();
-    } catch (error) {
-      toast.error('Erreur lors de la suppression');
-    } finally {
       setDeleteDialog(null);
+      fetchClasses(); // Recharger la liste
+    } catch (error) {
+      console.error('Erreur suppression:', error);
+      toast.error(error.response?.data?.message || 'Erreur lors de la suppression');
     }
   };
 
@@ -101,12 +103,20 @@ const ClassesList = () => {
 
   const handleMenuClick = (event, classItem) => {
     setSelectedClass(classItem);
-    setFilterAnchor(event.currentTarget);
+    setMenuAnchor(event.currentTarget);
   };
 
   const handleMenuClose = () => {
-    setFilterAnchor(null);
+    setMenuAnchor(null);
     setSelectedClass(null);
+  };
+
+  const handleFilterClick = (event) => {
+    setFilterAnchor(event.currentTarget);
+  };
+
+  const handleFilterClose = () => {
+    setFilterAnchor(null);
   };
 
   const levels = [...new Set(classes.map(c => c.level))];
@@ -191,7 +201,7 @@ const ClassesList = () => {
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <BookIcon fontSize="small" color="action" />
           <Typography>
-            {Array.isArray(row.subjects) ? row.subjects.length : 0}
+            {Array.isArray(row.classSubjects) ? row.classSubjects.length : 0}
           </Typography>
         </Box>
       ),
@@ -202,7 +212,7 @@ const ClassesList = () => {
       width: 120,
       render: (value, row) => (
         <Typography>
-          {Array.isArray(row.teachers) ? row.teachers.length : 0}
+          {Array.isArray(row.classTeachers) ? row.classTeachers.length : 0}
         </Typography>
       ),
     },
@@ -273,7 +283,7 @@ const ClassesList = () => {
               <Box sx={{ display: 'flex', gap: 2, justifyContent: 'flex-end' }}>
                 <Button
                   startIcon={<FilterIcon />}
-                  onClick={(e) => setFilterAnchor(e.currentTarget)}
+                  onClick={handleFilterClick}
                   variant="outlined"
                 >
                   Niveau: {selectedLevel === 'all' ? 'Tous' : selectedLevel}
@@ -292,13 +302,19 @@ const ClassesList = () => {
         <Menu
           anchorEl={filterAnchor}
           open={Boolean(filterAnchor)}
-          onClose={() => setFilterAnchor(null)}
+          onClose={handleFilterClose}
         >
-          <MenuItem onClick={() => setSelectedLevel('all')}>
+          <MenuItem onClick={() => {
+            setSelectedLevel('all');
+            handleFilterClose();
+          }}>
             Tous les niveaux
           </MenuItem>
           {levels.map((level) => (
-            <MenuItem key={level} onClick={() => setSelectedLevel(level)}>
+            <MenuItem key={level} onClick={() => {
+              setSelectedLevel(level);
+              handleFilterClose();
+            }}>
               {level}
             </MenuItem>
           ))}
@@ -343,7 +359,7 @@ const ClassesList = () => {
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <BookIcon fontSize="small" color="action" />
                         <Typography variant="body2">
-                          {Array.isArray(classItem.subjects) ? classItem.subjects.length : 0} matières
+                          {Array.isArray(classItem.classSubjects) ? classItem.classSubjects.length : 0} matières
                         </Typography>
                       </Box>
                     </Grid>
@@ -401,8 +417,8 @@ const ClassesList = () => {
 
       {/* Menu contextuel */}
       <Menu
-        anchorEl={filterAnchor}
-        open={Boolean(filterAnchor) && Boolean(selectedClass)}
+        anchorEl={menuAnchor}
+        open={Boolean(menuAnchor)}
         onClose={handleMenuClose}
       >
         <MenuItem onClick={() => {
@@ -449,7 +465,7 @@ const ClassesList = () => {
             <strong>{deleteDialog?.name} ({deleteDialog?.level})</strong> ?
           </Typography>
           <Typography variant="body2" color="error" sx={{ mt: 2 }}>
-            Attention: Cette action supprimera également tous les étudiants et les notes associés à cette classe.
+            Attention: Cette action est irréversible. Si la classe contient des étudiants, vous ne pourrez pas la supprimer.
           </Typography>
         </DialogContent>
         <DialogActions>

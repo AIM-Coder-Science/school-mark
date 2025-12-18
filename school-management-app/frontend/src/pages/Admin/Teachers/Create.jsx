@@ -123,20 +123,20 @@ const CreateTeacher = () => {
       const [classesRes, subjectsRes] = await Promise.all([
         adminAPI.getClasses(),
         // Note: Vous devrez créer un endpoint pour les matières
-        // adminAPI.getSubjects()
+        adminAPI.getAllSubjects()
       ]);
 
       setClasses(classesRes.data.data || []);
-      // setSubjects(subjectsRes.data.data || []);
+      setSubjects(subjectsRes.data.data || []);
       
       // Pour l'exemple, simuler des données
-      setSubjects([
+      /*setSubjects([
         { id: 1, name: 'Mathématiques', code: 'MATH' },
         { id: 2, name: 'Physique', code: 'PHY' },
         { id: 3, name: 'Chimie', code: 'CHIM' },
         { id: 4, name: 'Français', code: 'FR' },
         { id: 5, name: 'Anglais', code: 'ANG' },
-      ]);
+      ]);*/
     } catch (error) {
       toast.error('Erreur lors du chargement des données');
     } finally {
@@ -177,10 +177,32 @@ const CreateTeacher = () => {
     setAssignments(newAssignments);
     setValue('assignments', newAssignments);
   };
-
+/*
   const getClassSubjects = (classId) => {
     const classItem = classes.find(c => c.id === classId);
     return classItem?.subjects || [];
+  };*/
+
+  const getClassSubjects = (classId) => {
+    const classItem = classes.find(c => c.id === classId);
+    if (!classItem || !Array.isArray(classItem.classSubjects)) {
+      return [];
+    }
+    
+    // Filtrer par spécialités de l'enseignant si disponibles
+    const teacherSpecialties = watch('specialties') || [];
+    
+    if (teacherSpecialties.length === 0) {
+      return classItem.classSubjects;
+    }
+    
+    // Filtrer les matières qui correspondent aux spécialités
+    return classItem.classSubjects.filter(subject => {
+      return teacherSpecialties.some(specialty => 
+        subject.name.toLowerCase().includes(specialty.toLowerCase()) ||
+        specialty.toLowerCase().includes(subject.name.toLowerCase())
+      );
+    });
   };
 
   const onSubmit = async (data) => {

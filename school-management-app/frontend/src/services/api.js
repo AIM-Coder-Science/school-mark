@@ -15,7 +15,7 @@ export const authAPI = {
 export const adminAPI = {
   // Teachers
   createTeacher: (data) => axiosInstance.post('/admin/teachers', data),
-  getTeachers: () => axiosInstance.get('/admin/teachers'),
+  getAllTeachers: () => axiosInstance.get('/admin/teachers'),
   getTeacher: (id) => axiosInstance.get(`/admin/teachers/${id}`), // ✅ Ajouté
   updateTeacher: (id, data) => axiosInstance.put(`/admin/teachers/${id}`, data), // ✅ Ajouté
   deleteTeacher: (id) => axiosInstance.delete(`/admin/teachers/${id}`), // ✅ Ajouté
@@ -39,7 +39,7 @@ export const adminAPI = {
   
   // Subjects
   createSubject: (data) => axiosInstance.post('/admin/subjects', data),
-  getSubjects: () => axiosInstance.get('/admin/subjects'), // ✅ Ajouté
+  getAllSubjects: () => axiosInstance.get('/admin/subjects'), // ✅ Ajouté
   getSubject: (id) => axiosInstance.get(`/admin/subjects/${id}`), // ✅ Ajouté
   updateSubject: (id, data) => axiosInstance.put(`/admin/subjects/${id}`, data), // ✅ Ajouté
   deleteSubject: (id) => axiosInstance.delete(`/admin/subjects/${id}`), // ✅ Ajouté
