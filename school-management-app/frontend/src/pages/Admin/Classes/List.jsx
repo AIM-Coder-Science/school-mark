@@ -61,7 +61,7 @@ const ClassesList = () => {
   const fetchClasses = async () => {
     try {
       setLoading(true);
-      const response = await adminAPI.getClasses();
+      const response = await adminAPI.getAllClasses();
       console.log('Classes reçues:', response.data.data);
       setClasses(response.data.data || []);
     } catch (error) {

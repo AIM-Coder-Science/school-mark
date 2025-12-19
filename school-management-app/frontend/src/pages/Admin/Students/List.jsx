@@ -61,8 +61,8 @@ const StudentsList = () => {
     try {
       setLoading(true);
       const [studentsRes, classesRes] = await Promise.all([
-        adminAPI.getStudents(),
-        adminAPI.getClasses(),
+        adminAPI.getAllStudents(),
+        adminAPI.getAllClasses(),
       ]);
       
       setStudents(studentsRes.data.data || []);

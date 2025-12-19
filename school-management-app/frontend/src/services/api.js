@@ -18,19 +18,18 @@ export const adminAPI = {
   getAllTeachers: () => axiosInstance.get('/admin/teachers'),
   getTeacher: (id) => axiosInstance.get(`/admin/teachers/${id}`), // ✅ Ajouté
   updateTeacher: (id, data) => axiosInstance.put(`/admin/teachers/${id}`, data), // ✅ Ajouté
-  deleteTeacher: (id) => axiosInstance.delete(`/admin/teachers/${id}`), // ✅ Ajouté
+  //deleteTeacher: (id) => axiosInstance.delete(`/admin/teachers/${id}`), // ✅ Ajouté
   
   // Students
   createStudent: (data) => axiosInstance.post('/admin/students', data),
-  getStudents: (classId) => 
-    axiosInstance.get(`/admin/students${classId ? `?classId=${classId}` : ''}`),
+  getStudents: (classId) => axiosInstance.get(`/admin/students${classId ? `?classId=${classId}` : ''}`),
   getStudent: (id) => axiosInstance.get(`/admin/students/${id}`), // ✅ Ajouté
   updateStudent: (id, data) => axiosInstance.put(`/admin/students/${id}`, data), // ✅ Ajouté
-  deleteStudent: (id) => axiosInstance.delete(`/admin/students/${id}`), // ✅ Ajouté
+  //deleteStudent: (id) => axiosInstance.delete(`/admin/students/${id}`), // ✅ Ajouté
   
   // Classes
   createClass: (data) => axiosInstance.post('/admin/classes', data),
-  getClasses: () => axiosInstance.get('/admin/classes'),
+  getAllClasses: () => axiosInstance.get('/admin/classes'),
   getClass: (id) => axiosInstance.get(`/admin/classes/${id}`), // ✅ Ajouté
   updateClass: (id, data) => axiosInstance.put(`/admin/classes/${id}`, data), // ✅ Ajouté
   deleteClass: (id) => axiosInstance.delete(`/admin/classes/${id}`), // ✅ Ajouté

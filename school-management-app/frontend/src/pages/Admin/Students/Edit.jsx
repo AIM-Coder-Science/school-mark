@@ -6,17 +6,25 @@ import {
   TextField,
   Button,
   Grid,
-  Chip,
-  Autocomplete,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
   Alert,
   Divider,
   IconButton,
+  InputAdornment,
   Card,
   CardContent,
+  Chip,
 } from '@mui/material';
 import {
   Save as SaveIcon,
   ArrowBack as ArrowBackIcon,
+  Person as PersonIcon,
+  Phone as PhoneIcon,
+  Email as EmailIcon,
+  CalendarToday as CalendarIcon,
 } from '@mui/icons-material';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -27,35 +35,22 @@ import { adminAPI } from '../../../services/api';
 import toast from 'react-hot-toast';
 import Loader from '../../../components/common/Loader';
 
-const specialtyOptions = [
-  'Mathématiques',
-  'Physique',
-  'Chimie',
-  'Sciences',
-  'Français',
-  'Anglais',
-  'Histoire-Géographie',
-  'Philosophie',
-  'Éducation Physique',
-  'Informatique',
-  'Technologie',
-  'Arts Plastiques',
-  'Musique',
-];
-
-const EditTeacher = () => {
+const EditStudent = () => {
   const navigate = useNavigate();
-  const { teacherId } = useParams();
+  const { studentId } = useParams();
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [classes, setClasses] = useState([]);
 
   const schema = yup.object().shape({
     firstName: yup.string().required('Le prénom est requis'),
     lastName: yup.string().required('Le nom est requis'),
     matricule: yup.string().required('Le matricule est requis'),
     email: yup.string().email('Email invalide').nullable(),
-    phone: yup.string().nullable(),
-    specialties: yup.array().min(1, 'Au moins une spécialité est requise'),
+    birthDate: yup.string().nullable(),
+    classId: yup.number().required('La classe est requise'),
+    parentName: yup.string().nullable(),
+    parentPhone: yup.string().nullable(),
   });
 
   const {
@@ -71,31 +66,43 @@ const EditTeacher = () => {
       lastName: '',
       matricule: '',
       email: '',
-      phone: '',
-      specialties: [],
+      birthDate: '',
+      classId: '',
+      parentName: '',
+      parentPhone: '',
     },
   });
 
   useEffect(() => {
-    fetchTeacherData();
-  }, [teacherId]);
+    fetchData();
+  }, [studentId]);
 
-  const fetchTeacherData = async () => {
+  const fetchData = async () => {
     try {
       setInitialLoading(true);
-      const response = await adminAPI.getTeacher(teacherId);
-      const teacher = response.data.data;
+      
+      const [studentRes, classesRes] = await Promise.all([
+        adminAPI.getStudent(studentId),
+        adminAPI.getAllClasses(),
+      ]);
 
-      setValue('firstName', teacher.firstName);
-      setValue('lastName', teacher.lastName);
-      setValue('matricule', teacher.matricule);
-      setValue('email', teacher.email || '');
-      setValue('phone', teacher.phone || '');
-      setValue('specialties', teacher.specialties || []);
+      const student = studentRes.data.data;
+      
+      // Pré-remplir le formulaire
+      setValue('firstName', student.firstName);
+      setValue('lastName', student.lastName);
+      setValue('matricule', student.matricule);
+      setValue('email', student.email || '');
+      setValue('birthDate', student.birthDate || '');
+      setValue('classId', student.classId);
+      setValue('parentName', student.parentName || '');
+      setValue('parentPhone', student.parentPhone || '');
+
+      setClasses(classesRes.data.data || []);
     } catch (error) {
-      console.error('Erreur chargement enseignant:', error);
+      console.error('Erreur chargement données:', error);
       toast.error('Erreur lors du chargement des données');
-      navigate('/admin/teachers');
+      navigate('/admin/students');
     } finally {
       setInitialLoading(false);
     }
@@ -105,19 +112,21 @@ const EditTeacher = () => {
     try {
       setLoading(true);
       
-      const teacherData = {
+      const studentData = {
         firstName: data.firstName,
         lastName: data.lastName,
         matricule: data.matricule,
         email: data.email || null,
-        phone: data.phone || null,
-        specialties: data.specialties,
+        birthDate: data.birthDate || null,
+        classId: parseInt(data.classId),
+        parentName: data.parentName || null,
+        parentPhone: data.parentPhone || null,
       };
 
-      await adminAPI.updateTeacher(teacherId, teacherData);
+      await adminAPI.updateStudent(studentId, studentData);
       
-      toast.success('Enseignant mis à jour avec succès !');
-      navigate('/admin/teachers');
+      toast.success('Apprenant mis à jour avec succès !');
+      navigate('/admin/students');
     } catch (error) {
       console.error('Erreur mise à jour:', error);
       toast.error(error.response?.data?.message || 'Erreur lors de la mise à jour');
@@ -133,20 +142,20 @@ const EditTeacher = () => {
   return (
     <>
       <Helmet>
-        <title>Modifier l'enseignant - Administration</title>
+        <title>Modifier l'apprenant - Administration</title>
       </Helmet>
 
       <Box sx={{ mb: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-          <IconButton onClick={() => navigate('/admin/teachers')}>
+          <IconButton onClick={() => navigate('/admin/students')}>
             <ArrowBackIcon />
           </IconButton>
           <Box>
             <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
-              Modifier l'enseignant
+              Modifier l'apprenant
             </Typography>
             <Typography variant="body1" color="textSecondary">
-              Modifiez les informations de l'enseignant
+              Modifiez les informations de l'apprenant
             </Typography>
           </Box>
         </Box>
@@ -154,12 +163,6 @@ const EditTeacher = () => {
         <Paper sx={{ p: 3, borderRadius: 2 }}>
           <form onSubmit={handleSubmit(onSubmit)}>
             <Grid container spacing={3}>
-              <Grid item xs={12}>
-                <Alert severity="info">
-                  Pour modifier les affectations de classes et matières, veuillez contacter l'administrateur système.
-                </Alert>
-              </Grid>
-
               {/* Informations personnelles */}
               <Grid item xs={12}>
                 <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
@@ -178,6 +181,13 @@ const EditTeacher = () => {
                       label="Prénom *"
                       error={!!errors.firstName}
                       helperText={errors.firstName?.message}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <PersonIcon color="action" />
+                          </InputAdornment>
+                        ),
+                      }}
                     />
                   )}
                 />
@@ -227,22 +237,13 @@ const EditTeacher = () => {
                       type="email"
                       error={!!errors.email}
                       helperText={errors.email?.message}
-                    />
-                  )}
-                />
-              </Grid>
-              
-              <Grid item xs={12} md={6}>
-                <Controller
-                  name="phone"
-                  control={control}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      fullWidth
-                      label="Téléphone"
-                      error={!!errors.phone}
-                      helperText={errors.phone?.message}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <EmailIcon color="action" />
+                          </InputAdornment>
+                        ),
+                      }}
                     />
                   )}
                 />
@@ -250,31 +251,105 @@ const EditTeacher = () => {
               
               <Grid item xs={12}>
                 <Controller
-                  name="specialties"
+                  name="birthDate"
                   control={control}
                   render={({ field }) => (
-                    <Autocomplete
-                      multiple
-                      options={specialtyOptions}
-                      value={field.value}
-                      onChange={(event, newValue) => field.onChange(newValue)}
-                      renderInput={(params) => (
-                        <TextField
-                          {...params}
-                          label="Spécialités *"
-                          error={!!errors.specialties}
-                          helperText={errors.specialties?.message}
-                        />
+                    <TextField
+                      {...field}
+                      fullWidth
+                      label="Date de naissance"
+                      type="date"
+                      error={!!errors.birthDate}
+                      helperText={errors.birthDate?.message}
+                      InputLabelProps={{
+                        shrink: true,
+                      }}
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <CalendarIcon color="action" />
+                          </InputAdornment>
+                        ),
+                      }}
+                    />
+                  )}
+                />
+              </Grid>
+
+              {/* Classe */}
+              <Grid item xs={12}>
+                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, mt: 2 }}>
+                  Classe
+                </Typography>
+              </Grid>
+
+              <Grid item xs={12}>
+                <Controller
+                  name="classId"
+                  control={control}
+                  render={({ field }) => (
+                    <FormControl fullWidth error={!!errors.classId}>
+                      <InputLabel>Classe *</InputLabel>
+                      <Select
+                        {...field}
+                        label="Classe *"
+                      >
+                        <MenuItem value="">Sélectionner une classe</MenuItem>
+                        {classes.map((classItem) => (
+                          <MenuItem key={classItem.id} value={classItem.id}>
+                            {classItem.name} ({classItem.level})
+                          </MenuItem>
+                        ))}
+                      </Select>
+                      {errors.classId && (
+                        <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 2 }}>
+                          {errors.classId.message}
+                        </Typography>
                       )}
-                      renderTags={(value, getTagProps) =>
-                        value.map((option, index) => (
-                          <Chip
-                            label={option}
-                            {...getTagProps({ index })}
-                            size="small"
-                          />
-                        ))
-                      }
+                    </FormControl>
+                  )}
+                />
+              </Grid>
+
+              {/* Parents */}
+              <Grid item xs={12}>
+                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, mt: 2 }}>
+                  Informations des parents/tuteurs
+                </Typography>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Controller
+                  name="parentName"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      fullWidth
+                      label="Nom du parent/tuteur"
+                      placeholder="Ex: M. Dupont Jean"
+                    />
+                  )}
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+                <Controller
+                  name="parentPhone"
+                  control={control}
+                  render={({ field }) => (
+                    <TextField
+                      {...field}
+                      fullWidth
+                      label="Téléphone du parent"
+                      placeholder="Ex: +229 XX XX XX XX"
+                      InputProps={{
+                        startAdornment: (
+                          <InputAdornment position="start">
+                            <PhoneIcon color="action" />
+                          </InputAdornment>
+                        ),
+                      }}
                     />
                   )}
                 />
@@ -309,16 +384,19 @@ const EditTeacher = () => {
                         </Typography>
                       </Grid>
                       
-                      <Grid item xs={12}>
-                        <Typography variant="body2" color="textSecondary">
-                          Spécialités:
-                        </Typography>
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                          {watch('specialties')?.map((spec, index) => (
-                            <Chip key={index} label={spec} size="small" color="primary" variant="outlined" />
-                          ))}
-                        </Box>
-                      </Grid>
+                      {watch('classId') && (
+                        <Grid item xs={12}>
+                          <Typography variant="body2" color="textSecondary">
+                            Classe:
+                          </Typography>
+                          <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                            {(() => {
+                              const selectedClass = classes.find(c => c.id === parseInt(watch('classId')));
+                              return selectedClass ? `${selectedClass.name} (${selectedClass.level})` : 'Non spécifiée';
+                            })()}
+                          </Typography>
+                        </Grid>
+                      )}
                     </Grid>
                   </CardContent>
                 </Card>
@@ -329,7 +407,7 @@ const EditTeacher = () => {
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
                   <Button
                     variant="outlined"
-                    onClick={() => navigate('/admin/teachers')}
+                    onClick={() => navigate('/admin/students')}
                   >
                     Annuler
                   </Button>
@@ -357,4 +435,4 @@ const EditTeacher = () => {
   );
 };
 
-export default EditTeacher;
+export default EditStudent;

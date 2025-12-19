@@ -7,6 +7,10 @@ const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
 
+//=======================================================
+// TEACHERS ENDPOINTS
+//=======================================================
+
 // @desc    Créer un enseignant
 // @route   POST /api/admin/teachers
 // @access  Privé (Admin)
@@ -131,6 +135,201 @@ const createTeacher = async (req, res) => {
         });
     }
 };
+
+const getTeacher = async (req, res) => {
+    try {
+        const { teacherId } = req.params;
+
+        const teacher = await Teacher.findByPk(teacherId, {
+            include: [
+                {
+                    model: User,
+                    as: 'user',
+                    attributes: ['id', 'email', 'isActive', 'created_at']
+                },
+                {
+                    model: Class,
+                    as: 'assignedClasses',
+                    through: { attributes: [] },
+                    include: [
+                        {
+                            model: Subject,
+                            as: 'classSubjects',
+                            through: { attributes: ['coefficient'] }
+                        },
+                        {
+                            model: Student,
+                            as: 'students',
+                            attributes: ['id']
+                        }
+                    ]
+                },
+                {
+                    model: Class,
+                    as: 'principalOfClasses',
+                    attributes: ['id', 'name', 'level']
+                }
+            ]
+        });
+
+        if (!teacher) {
+            return res.status(404).json({
+                success: false,
+                message: 'Enseignant non trouvé'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: teacher
+        });
+    } catch (error) {
+        console.error('Erreur récupération enseignant:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur'
+        });
+    }
+};
+
+
+// @desc    Obtenir tous les enseignants
+// @route   GET /api/admin/teachers
+// @access  Privé (Admin)
+const getAllTeachers = async (req, res) => {
+    try {
+        const teachers = await Teacher.findAll({
+            include: [
+                {
+                    model: User,
+                    as: 'user',
+                    attributes: ['email', 'isActive', 'created_at']
+                },
+                {
+                    model: Class,
+                    as: 'assignedClasses',
+                    through: { attributes: [] }
+                },
+                {
+                    model: Class,
+                    as: 'principalOfClasses',
+                    attributes: ['id', 'name', 'level']
+                }
+            ],
+            order: [['lastName', 'ASC']]
+        });
+
+        res.json({
+            success: true,
+            count: teachers.length,
+            data: teachers
+        });
+    } catch (error) {
+        console.error('Erreur récupération enseignants:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur'
+        });
+    }
+};
+
+// @desc    Mettre à jour un enseignant
+// @route   PUT /api/admin/teachers/:id
+const updateTeacher = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+        const { teacherId } = req.params;
+        const { firstName, lastName, matricule, email, phone, specialties } = req.body;
+
+        const teacher = await Teacher.findByPk(teacherId, { transaction });
+        
+        if (!teacher) {
+            await transaction.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Enseignant non trouvé'
+            });
+        }
+
+        // Mettre à jour les champs
+        if (firstName) teacher.firstName = firstName;
+        if (lastName) teacher.lastName = lastName;
+        if (matricule) teacher.matricule = matricule;
+        if (email !== undefined) teacher.email = email;
+        if (phone !== undefined) teacher.phone = phone;
+        if (specialties !== undefined) teacher.specialties = specialties;
+
+        await teacher.save({ transaction });
+        await transaction.commit();
+
+        // Récupérer l'enseignant mis à jour avec les détails
+        const updatedTeacher = await Teacher.findByPk(teacherId, {
+            include: [
+                {
+                    model: User,
+                    as: 'user',
+                    attributes: ['email', 'isActive']
+                },
+                {
+                    model: Class,
+                    as: 'assignedClasses',
+                    through: { attributes: [] }
+                }
+            ]
+        });
+
+        res.json({
+            success: true,
+            message: 'Enseignant mis à jour avec succès',
+            data: updatedTeacher
+        });
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Erreur mise à jour enseignant:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur'
+        });
+    }
+};
+
+/*
+const deleteTeacher = async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Vérifier si l'enseignant existe
+    const teacher = await Teacher.findByPk(id);
+    if (!teacher) {
+      return res.status(404).json({
+        success: false,
+        message: 'Enseignant non trouvé'
+      });
+    }
+
+    // Si l'enseignant est associé à un utilisateur, vous voudrez peut-être
+    // aussi gérer la suppression de l'utilisateur
+    await teacher.destroy();
+
+    res.json({
+      success: true,
+      message: 'Enseignant supprimé avec succès'
+    });
+  } catch (error) {
+    console.error('Erreur deleteTeacher:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Erreur serveur',
+      error: error.message 
+    });
+  }
+};
+*/
+
+//========================================================
+// STUDENTS ENDPOINTS
+//========================================================
 
 // @desc    Créer un apprenant
 // @route   POST /api/admin/students
@@ -258,6 +457,185 @@ const createStudent = async (req, res) => {
         });
     }
 };
+
+const getStudent = async (req, res) => {
+    try {
+        const { studentId } = req.params;
+
+        const student = await Student.findByPk(studentId, {
+            include: [
+                {
+                    model: User,
+                    as: 'user',
+                    attributes: ['id', 'email', 'isActive', 'created_at']
+                },
+                {
+                    model: Class,
+                    as: 'class',
+                    attributes: ['id', 'name', 'level'],
+                    include: [
+                        {
+                            model: Teacher,
+                            as: 'principalTeacher',
+                            attributes: ['id', 'firstName', 'lastName', 'matricule']
+                        },
+                        {
+                            model: Subject,
+                            as: 'classSubjects',
+                            through: { attributes: ['coefficient'] }
+                        }
+                    ]
+                }
+            ]
+        });
+
+        if (!student) {
+            return res.status(404).json({
+                success: false,
+                message: 'Étudiant non trouvé'
+            });
+        }
+
+        res.json({
+            success: true,
+            data: student
+        });
+    } catch (error) {
+        console.error('Erreur récupération étudiant:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur'
+        });
+    }
+};
+
+// @desc    Obtenir tous les apprenants
+// @route   GET /api/admin/students
+// @access  Privé (Admin)
+const getAllStudents = async (req, res) => {
+    try {
+        const { classId } = req.query;
+        
+        const whereCondition = {};
+        if (classId && classId !== 'all' && classId !== 'undefined') {
+            whereCondition.classId = classId;
+        }
+
+        const students = await Student.findAll({
+            where: whereCondition,
+            include: [
+                {
+                    model: User,
+                    as: 'user',
+                    // On utilise le format [colonne_db, alias_js] pour rester cohérent avec ton front
+                    attributes: [
+                        'id', 
+                        'email', 
+                        ['is_active', 'isActive'], 
+                        ['created_at', 'createdAt']
+                    ]
+                },
+                {
+                    model: Class,
+                    as: 'class',
+                    attributes: ['id', 'name', 'level']
+                }
+            ],
+            // ATTENTION : Si dans ta table "students", la colonne est "last_name", 
+            // alors utilise 'last_name'. Si Sequelize la mappe en 'lastName', utilise 'lastName'.
+            order: [['lastName', 'ASC']] 
+        });
+
+        res.json({
+            success: true,
+            count: students.length,
+            data: students
+        });
+    } catch (error) {
+        console.error('Erreur récupération apprenants:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur'
+        });
+    }
+};
+
+const updateStudent = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+        const { studentId } = req.params;
+        const { firstName, lastName, matricule, email, birthDate, classId, parentName, parentPhone } = req.body;
+
+        const student = await Student.findByPk(studentId, { transaction });
+        
+        if (!student) {
+            await transaction.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Étudiant non trouvé'
+            });
+        }
+
+        // Vérifier si la nouvelle classe existe
+        if (classId && classId !== student.classId) {
+            const classExists = await Class.findByPk(classId, { transaction });
+            if (!classExists) {
+                await transaction.rollback();
+                return res.status(404).json({
+                    success: false,
+                    message: 'Classe non trouvée'
+                });
+            }
+        }
+
+        // Mettre à jour les champs
+        if (firstName) student.firstName = firstName;
+        if (lastName) student.lastName = lastName;
+        if (matricule) student.matricule = matricule;
+        if (email !== undefined) student.email = email;
+        if (birthDate !== undefined) student.birthDate = birthDate;
+        if (classId) student.classId = classId;
+        if (parentName !== undefined) student.parentName = parentName;
+        if (parentPhone !== undefined) student.parentPhone = parentPhone;
+
+        await student.save({ transaction });
+        await transaction.commit();
+
+        // Récupérer l'étudiant mis à jour avec les détails
+        const updatedStudent = await Student.findByPk(studentId, {
+            include: [
+                {
+                    model: User,
+                    as: 'user',
+                    attributes: ['email', 'isActive']
+                },
+                {
+                    model: Class,
+                    as: 'class',
+                    attributes: ['id', 'name', 'level']
+                }
+            ]
+        });
+
+        res.json({
+            success: true,
+            message: 'Étudiant mis à jour avec succès',
+            data: updatedStudent
+        });
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Erreur mise à jour étudiant:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur'
+        });
+    }
+};
+
+//=======================================================
+// CLASSES ENDPOINTS
+//=======================================================
 
 // @desc    Créer une classe
 // @route   POST /api/admin/classes
@@ -393,6 +771,55 @@ const getClass = async (req, res) => {
         });
     } catch (error) {
         console.error('Erreur récupération classe:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur'
+        });
+    }
+};
+
+
+// @desc    Obtenir toutes les classes
+// @route   GET /api/admin/classes
+// @access  Privé (Admin)
+const getAllClasses = async (req, res) => {
+    try {
+        const classes = await Class.findAll({
+            include: [
+                {
+                    model: Teacher,
+                    as: 'principalTeacher',
+                    attributes: ['id', 'firstName', 'lastName', 'matricule']
+                },
+                {
+                    model: Subject,
+                    as: 'classSubjects',
+                    through: { 
+                        attributes: ['coefficient'] // Inclure le coefficient
+                    }
+                },
+                {
+                    model: Student,
+                    as: 'students',
+                    attributes: ['id', 'firstName', 'lastName', 'matricule']
+                },
+                {
+                    model: Teacher,
+                    as: 'classTeachers',
+                    through: { attributes: [] },
+                    attributes: ['id', 'firstName', 'lastName', 'matricule']
+                }
+            ],
+            order: [['level', 'ASC'], ['name', 'ASC']]
+        });
+
+        res.json({
+            success: true,
+            count: classes.length,
+            data: classes
+        });
+    } catch (error) {
+        console.error('Erreur récupération classes:', error);
         res.status(500).json({
             success: false,
             message: 'Erreur serveur'
@@ -564,6 +991,96 @@ const deleteClass = async (req, res) => {
     }
 };
 
+// @desc    Assigner un professeur principal à une classe
+// @route   PUT /api/admin/classes/:classId/principal
+// @access  Privé (Admin)
+const assignClassPrincipal = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
+    try {
+        const { classId } = req.params;
+        const { teacherId } = req.body;
+
+        if (!teacherId) {
+            await transaction.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Veuillez fournir l\'ID de l\'enseignant'
+            });
+        }
+
+        // Vérifier si la classe existe
+        const classToUpdate = await Class.findByPk(classId, { transaction });
+        if (!classToUpdate) {
+            await transaction.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Classe non trouvée'
+            });
+        }
+
+        // Vérifier si l'enseignant existe
+        const teacher = await Teacher.findByPk(teacherId, { transaction });
+        if (!teacher) {
+            await transaction.rollback();
+            return res.status(404).json({
+                success: false,
+                message: 'Enseignant non trouvé'
+            });
+        }
+
+        // Vérifier si l'enseignant est assigné à cette classe
+        const isAssigned = await TeacherClassSubject.findOne({
+            where: {
+                teacherId,
+                classId
+            },
+            transaction
+        });
+
+        if (!isAssigned) {
+            await transaction.rollback();
+            return res.status(400).json({
+                success: false,
+                message: 'Cet enseignant n\'est pas assigné à cette classe'
+            });
+        }
+
+        // Mettre à jour le professeur principal
+        classToUpdate.teacherPrincipalId = teacherId;
+        await classToUpdate.save({ transaction });
+
+        await transaction.commit();
+
+        // Récupérer la classe mise à jour avec les détails
+        const updatedClass = await Class.findByPk(classId, {
+            include: [
+                {
+                    model: Teacher,
+                    as: 'principalTeacher',
+                    attributes: ['id', 'firstName', 'lastName', 'matricule']
+                }
+            ]
+        });
+
+        res.json({
+            success: true,
+            message: 'Professeur principal assigné avec succès',
+            data: updatedClass
+        });
+    } catch (error) {
+        await transaction.rollback();
+        console.error('Erreur assignation professeur principal:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur'
+        });
+    }
+};
+
+//========================================================
+// SUBJECTS ENDPOINTS
+//========================================================
 // @desc    Créer une matière
 // @route   POST /api/admin/subjects
 // @access  Privé (Admin)
@@ -834,93 +1351,9 @@ const deleteSubject = async (req, res) => {
     }
 };
 
-// @desc    Assigner un professeur principal à une classe
-// @route   PUT /api/admin/classes/:classId/principal
-// @access  Privé (Admin)
-const assignClassPrincipal = async (req, res) => {
-    const transaction = await sequelize.transaction();
-    
-    try {
-        const { classId } = req.params;
-        const { teacherId } = req.body;
-
-        if (!teacherId) {
-            await transaction.rollback();
-            return res.status(400).json({
-                success: false,
-                message: 'Veuillez fournir l\'ID de l\'enseignant'
-            });
-        }
-
-        // Vérifier si la classe existe
-        const classToUpdate = await Class.findByPk(classId, { transaction });
-        if (!classToUpdate) {
-            await transaction.rollback();
-            return res.status(404).json({
-                success: false,
-                message: 'Classe non trouvée'
-            });
-        }
-
-        // Vérifier si l'enseignant existe
-        const teacher = await Teacher.findByPk(teacherId, { transaction });
-        if (!teacher) {
-            await transaction.rollback();
-            return res.status(404).json({
-                success: false,
-                message: 'Enseignant non trouvé'
-            });
-        }
-
-        // Vérifier si l'enseignant est assigné à cette classe
-        const isAssigned = await TeacherClassSubject.findOne({
-            where: {
-                teacherId,
-                classId
-            },
-            transaction
-        });
-
-        if (!isAssigned) {
-            await transaction.rollback();
-            return res.status(400).json({
-                success: false,
-                message: 'Cet enseignant n\'est pas assigné à cette classe'
-            });
-        }
-
-        // Mettre à jour le professeur principal
-        classToUpdate.teacherPrincipalId = teacherId;
-        await classToUpdate.save({ transaction });
-
-        await transaction.commit();
-
-        // Récupérer la classe mise à jour avec les détails
-        const updatedClass = await Class.findByPk(classId, {
-            include: [
-                {
-                    model: Teacher,
-                    as: 'principalTeacher',
-                    attributes: ['id', 'firstName', 'lastName', 'matricule']
-                }
-            ]
-        });
-
-        res.json({
-            success: true,
-            message: 'Professeur principal assigné avec succès',
-            data: updatedClass
-        });
-    } catch (error) {
-        await transaction.rollback();
-        console.error('Erreur assignation professeur principal:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Erreur serveur'
-        });
-    }
-};
-
+//=======================================================
+//              MISCEALLENEOUS
+//=======================================================
 // @desc    Créer une publication
 // @route   POST /api/admin/publications
 // @access  Privé (Admin)
@@ -1063,319 +1496,6 @@ const getStats = async (req, res) => {
     }
 };
 
-
-// @desc    Obtenir un enseignant par ID
-// @route   GET /api/admin/teachers/:id
-/*const getTeacher = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // On récupère l'enseignant avec ses relations (User et Classes)
-    const teacher = await Teacher.findByPk(id, {
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['email', 'isActive']
-        },
-        {
-          model: Class,
-          as: 'assignedClasses', // Doit correspondre à l'alias de ton modèle
-          through: { attributes: [] }, // Masquer la table de liaison
-          include: [{
-            model: Subject,
-            // Si tu as une relation via TeacherClassSubject, ajuste ici
-          }]
-        }
-      ]
-    });
-
-    if (!teacher) {
-      return res.status(404).json({
-        success: false,
-        message: 'Enseignant non trouvé'
-      });
-    }
-
-    res.json({
-      success: true,
-      data: teacher
-    });
-  } catch (error) {
-    console.error('Erreur getTeacher:', error);
-    res.status(500).json({ success: false, message: 'Erreur serveur' });
-  }
-};
-*/
-
-const getTeacher = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Version simplifiée pour déboguer
-    const teacher = await Teacher.findByPk(id, {
-      include: [
-        {
-          model: User,
-          as: 'user',
-          attributes: ['id', 'email', 'isActive', 'createdAt']
-        },
-        {
-          model: Class,
-          as: 'assignedClasses',
-          attributes: ['id', 'name', 'level', 'academicYear'],
-          through: { attributes: [] }
-        }
-      ]
-    });
-
-    if (!teacher) {
-      return res.status(404).json({
-        success: false,
-        message: 'Enseignant non trouvé'
-      });
-    }
-
-    // Récupérer les matières séparément
-    const subjects = await Subject.findAll({
-      include: [{
-        model: Teacher,
-        as: 'subjectTeachers',
-        where: { id: teacher.id },
-        attributes: []
-      }],
-      attributes: ['id', 'name']
-    });
-
-    const response = {
-      ...teacher.toJSON(),
-      teacherSubjects: subjects
-    };
-
-    res.json({
-      success: true,
-      data: response
-    });
-  } catch (error) {
-    console.error('Erreur getTeacher:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Erreur serveur',
-      error: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-};
-
-// @desc    Obtenir tous les enseignants
-// @route   GET /api/admin/teachers
-// @access  Privé (Admin)
-const getAllTeachers = async (req, res) => {
-    try {
-        const teachers = await Teacher.findAll({
-            include: [
-                {
-                    model: User,
-                    as: 'user',
-                    attributes: ['email', 'isActive', 'created_at']
-                },
-                {
-                    model: Class,
-                    as: 'assignedClasses',
-                    through: { attributes: [] }
-                },
-                {
-                    model: Class,
-                    as: 'principalOfClasses',
-                    attributes: ['id', 'name', 'level']
-                }
-            ],
-            order: [['lastName', 'ASC']]
-        });
-
-        res.json({
-            success: true,
-            count: teachers.length,
-            data: teachers
-        });
-    } catch (error) {
-        console.error('Erreur récupération enseignants:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Erreur serveur'
-        });
-    }
-};
-
-// @desc    Mettre à jour un enseignant
-// @route   PUT /api/admin/teachers/:id
-const updateTeacher = async (req, res) => {
-    const transaction = await sequelize.transaction();
-    try {
-        const { id } = req.params;
-        const { 
-            firstName, 
-            lastName, 
-            phone, 
-            specialties,
-            classes // Array: [{ classId, subjectId }]
-        } = req.body;
-
-        // 1. Vérifier si l'enseignant existe
-        const teacher = await Teacher.findByPk(id, { transaction });
-        if (!teacher) {
-            await transaction.rollback();
-            return res.status(404).json({
-                success: false,
-                message: 'Enseignant non trouvé'
-            });
-        }
-
-        // 2. Mettre à jour les infos de base
-        await teacher.update({
-            firstName: firstName || teacher.firstName,
-            lastName: lastName || teacher.lastName,
-            phone: phone || teacher.phone,
-            specialties: specialties || teacher.specialties
-        }, { transaction });
-
-        // 3. Gestion des affectations (Classes/Matières)
-        // Si le tableau classes est fourni, on remplace les anciennes affectations
-        if (classes && Array.isArray(classes)) {
-            // Supprimer les anciennes affectations dans la table de liaison
-            await TeacherClassSubject.destroy({
-                where: { teacherId: id },
-                transaction
-            });
-
-            // Insérer les nouvelles affectations
-            if (classes.length > 0) {
-                const assignments = classes.map(cls => ({
-                    teacherId: id,
-                    classId: cls.classId,
-                    subjectId: cls.subjectId
-                }));
-                await TeacherClassSubject.bulkCreate(assignments, { transaction });
-            }
-        }
-
-        await transaction.commit();
-
-        // Récupérer l'enseignant mis à jour avec ses relations pour la réponse
-        const updatedTeacher = await Teacher.findByPk(id, {
-            include: [
-                { model: User, as: 'user', attributes: ['email', 'isActive'] },
-                { model: Class, as: 'assignedClasses' }
-            ]
-        });
-
-        res.json({
-            success: true,
-            message: 'Enseignant mis à jour avec succès',
-            data: updatedTeacher
-        });
-
-    } catch (error) {
-        await transaction.rollback();
-        console.error('Erreur updateTeacher:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Erreur lors de la mise à jour de l\'enseignant'
-        });
-    }
-};
-
-// @desc    Obtenir tous les apprenants
-// @route   GET /api/admin/students
-// @access  Privé (Admin)
-const getAllStudents = async (req, res) => {
-    try {
-        const { classId } = req.query;
-        
-        const whereCondition = {};
-        if (classId) {
-            whereCondition.classId = classId;
-        }
-
-        const students = await Student.findAll({
-            where: whereCondition,
-            include: [
-                {
-                    model: User,
-                    as: 'user',
-                    attributes: ['email', 'isActive', 'created_at']
-                },
-                {
-                    model: Class,
-                    as: 'class',
-                    attributes: ['id', 'name', 'level']
-                }
-            ],
-            order: [['lastName', 'ASC']]
-        });
-
-        res.json({
-            success: true,
-            count: students.length,
-            data: students
-        });
-    } catch (error) {
-        console.error('Erreur récupération apprenants:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Erreur serveur'
-        });
-    }
-};
-
-// @desc    Obtenir toutes les classes
-// @route   GET /api/admin/classes
-// @access  Privé (Admin)
-const getAllClasses = async (req, res) => {
-    try {
-        const classes = await Class.findAll({
-            include: [
-                {
-                    model: Teacher,
-                    as: 'principalTeacher',
-                    attributes: ['id', 'firstName', 'lastName', 'matricule']
-                },
-                {
-                    model: Subject,
-                    as: 'classSubjects',
-                    through: { 
-                        attributes: ['coefficient'] // Inclure le coefficient
-                    }
-                },
-                {
-                    model: Student,
-                    as: 'students',
-                    attributes: ['id', 'firstName', 'lastName', 'matricule']
-                },
-                {
-                    model: Teacher,
-                    as: 'classTeachers',
-                    through: { attributes: [] },
-                    attributes: ['id', 'firstName', 'lastName', 'matricule']
-                }
-            ],
-            order: [['level', 'ASC'], ['name', 'ASC']]
-        });
-
-        res.json({
-            success: true,
-            count: classes.length,
-            data: classes
-        });
-    } catch (error) {
-        console.error('Erreur récupération classes:', error);
-        res.status(500).json({
-            success: false,
-            message: 'Erreur serveur'
-        });
-    }
-};
-
-
 // @desc    Mettre à jour un utilisateur
 // @route   PUT /api/admin/users/:userId
 // @access  Privé (Admin)
@@ -1462,58 +1582,33 @@ const deleteUser = async (req, res) => {
     }
 };
 
-const deleteTeacher = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Vérifier si l'enseignant existe
-    const teacher = await Teacher.findByPk(id);
-    if (!teacher) {
-      return res.status(404).json({
-        success: false,
-        message: 'Enseignant non trouvé'
-      });
-    }
 
-    // Si l'enseignant est associé à un utilisateur, vous voudrez peut-être
-    // aussi gérer la suppression de l'utilisateur
-    await teacher.destroy();
 
-    res.json({
-      success: true,
-      message: 'Enseignant supprimé avec succès'
-    });
-  } catch (error) {
-    console.error('Erreur deleteTeacher:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Erreur serveur',
-      error: error.message 
-    });
-  }
-};
+
+
 
 module.exports = {
     createTeacher,
+    getTeacher,
+    getAllTeachers,
+    updateTeacher,
     createStudent,
+    getStudent,
+    getAllStudents,
+    updateStudent,
     createClass,
     getClass,
+    getAllClasses,
     updateClass,
     deleteClass,
+    assignClassPrincipal,
     createSubject,
     getAllSubjects,
     getSubject,
     updateSubject,
     deleteSubject,
-    assignClassPrincipal,
     createPublication,
     getStats,
-    getAllTeachers,
-    getTeacher,
-    updateTeacher,
-    getAllStudents,
-    getAllClasses,
     updateUser,
     deleteUser,
-    deleteTeacher,
 };

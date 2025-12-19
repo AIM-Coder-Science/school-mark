@@ -152,9 +152,9 @@ const AdminDashboard = () => {
       setLoading(true);
       const [statsResponse, teachersResponse, studentsResponse, classesResponse] = await Promise.all([
         adminAPI.getStats(),
-        adminAPI.getTeachers(),
-        adminAPI.getStudents(),
-        adminAPI.getClasses(),
+        adminAPI.getAllTeachers(),
+        adminAPI.getAllStudents(),
+        adminAPI.getAllClasses(),
       ]);
 
       setStats(statsResponse.data.data);

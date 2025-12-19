@@ -24,7 +24,8 @@ const {
     updateUser,
     deleteUser,
     getTeacher,
-    deleteTeacher,
+    getStudent,
+    updateStudent,
 } = require('../controllers/adminController');
 
 // Toutes les routes sont protégées et nécessitent le rôle admin
@@ -36,15 +37,18 @@ router.route('/teachers')
     .post(createTeacher)
     .get(getAllTeachers);
 
-router.route('/teachers/:id')
+router.route('/teachers/:teacherId')
     .get(getTeacher)
-    .put(updateTeacher)
-    .delete(deleteTeacher); 
+    .put(updateTeacher);
 
 // Routes pour les apprenants
 router.route('/students')
     .post(createStudent)
     .get(getAllStudents);
+
+router.route('/students/:studentId')
+    .get(getStudent)
+    .put(updateStudent);
 
 // Routes pour les classes
 router.route('/classes')

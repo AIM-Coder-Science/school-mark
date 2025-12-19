@@ -18,6 +18,8 @@ const TeacherDetail = lazy(() => import ('./pages/Admin/Teachers/Detail'));
 const EditTeacher = lazy(() => import ('./pages/Admin/Teachers/Edit'));
 const StudentsList = lazy(() => import('./pages/Admin/Students/List'));
 const CreateStudent = lazy(() => import('./pages/Admin/Students/Create'));
+const StudentDetail = lazy(() => import('./pages/Admin/Students/Detail'));
+const EditStudent = lazy(() => import('./pages/Admin/Students/Edit'));
 
 // Admin Classes
 const ClassesList = lazy(() => import('./pages/Admin/Classes/List'));
@@ -92,6 +94,8 @@ const AppContent = () => {
             <Route path="students">
               <Route index element={<ProtectedRoute role="admin"><StudentsList /></ProtectedRoute>} />
               <Route path="new" element={<ProtectedRoute role="admin"><CreateStudent /></ProtectedRoute>} />
+              <Route path=":studentId" element={<ProtectedRoute role="admin"><StudentDetail /></ProtectedRoute>} />
+              <Route path="edit/:studentId" element={<ProtectedRoute role="admin"><EditStudent /></ProtectedRoute>} />
             </Route>
 
             <Route path="classes">

@@ -19,13 +19,13 @@ import {
   Stepper,
   Step,
   StepLabel,
+  Chip,
 } from '@mui/material';
 import {
   Save as SaveIcon,
   ArrowBack as ArrowBackIcon,
   Visibility as VisibilityIcon,
   VisibilityOff as VisibilityOffIcon,
-  School as SchoolIcon,
   Person as PersonIcon,
   Phone as PhoneIcon,
   Email as EmailIcon,
@@ -36,10 +36,6 @@ import { useNavigate } from 'react-router-dom';
 import { useForm, Controller } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
-import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
-import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
-import { fr } from 'date-fns/locale';
 import { adminAPI } from '../../../services/api';
 import toast from 'react-hot-toast';
 import Loader from '../../../components/common/Loader';
@@ -52,63 +48,71 @@ const CreateStudent = () => {
   const [loading, setLoading] = useState(false);
   const [classes, setClasses] = useState([]);
   const [showPassword, setShowPassword] = useState(false);
-  const [birthDate, setBirthDate] = useState(null);
+  
+  // État pour stocker TOUTES les valeurs du formulaire
+  const [formValues, setFormValues] = useState({
+    firstName: '',
+    lastName: '',
+    matricule: '',
+    email: '',
+    birthDate: '',
+    classId: '',
+    parentName: '',
+    parentPhone: '',
+    temporaryPassword: 'Student123!',
+  });
 
+  // Schéma de validation
   const schema = yup.object().shape({
-    // Step 1
     firstName: yup.string().required('Le prénom est requis'),
     lastName: yup.string().required('Le nom est requis'),
     matricule: yup.string().required('Le matricule est requis'),
-    email: yup.string().email('Email invalide'),
-    birthDate: yup.date().nullable(),
-    
-    // Step 2
-    classId: yup.string().required('La classe est requise'),
-    parentName: yup.string(),
-    parentPhone: yup.string(),
-    
-    // Step 3
-    temporaryPassword: yup.string().when('$activeStep', {
-      is: 2,
-      then: yup.string()
-        .required('Le mot de passe temporaire est requis')
-        .min(6, 'Minimum 6 caractères'),
-    }),
+    email: yup.string().email('Email invalide').nullable(),
+    birthDate: yup.string().nullable(),
+    classId: yup.mixed().required('La classe est requise'),
+    parentName: yup.string().nullable(),
+    parentPhone: yup.string().nullable(),
+    temporaryPassword: yup.string().required('Le mot de passe temporaire est requis').min(6, 'Minimum 6 caractères'),
   });
 
   const {
     control,
     handleSubmit,
-    watch,
     setValue,
     trigger,
     formState: { errors },
   } = useForm({
     resolver: yupResolver(schema),
-    defaultValues: {
-      firstName: '',
-      lastName: '',
-      matricule: '',
-      email: '',
-      birthDate: null,
-      classId: '',
-      parentName: '',
-      parentPhone: '',
-      temporaryPassword: 'Student123!',
-    },
-    context: { activeStep },
+    defaultValues: formValues,
+    mode: 'onChange',
   });
 
   useEffect(() => {
     fetchClasses();
+    
+    // Initialiser les valeurs du formulaire avec formValues
+    Object.keys(formValues).forEach(key => {
+      setValue(key, formValues[key]);
+    });
   }, []);
+
+  // Mettre à jour formValues quand une valeur change
+  const updateFormValue = (field, value) => {
+    setFormValues(prev => ({
+      ...prev,
+      [field]: value
+    }));
+    setValue(field, value);
+  };
 
   const fetchClasses = async () => {
     try {
       setLoading(true);
-      const response = await adminAPI.getClasses();
+      const response = await adminAPI.getAllClasses();
+      console.log('Classes chargées:', response.data.data);
       setClasses(response.data.data || []);
     } catch (error) {
+      console.error('Erreur chargement classes:', error);
       toast.error('Erreur lors du chargement des classes');
     } finally {
       setLoading(false);
@@ -116,9 +120,38 @@ const CreateStudent = () => {
   };
 
   const handleNext = async () => {
-    const isValid = await trigger();
-    if (isValid) {
+    let fieldsToValidate = [];
+    
+    if (activeStep === 0) {
+      fieldsToValidate = ['firstName', 'lastName', 'matricule'];
+    } else if (activeStep === 1) {
+      fieldsToValidate = ['classId'];
+    } else if (activeStep === 2) {
+      fieldsToValidate = ['temporaryPassword'];
+    }
+    
+    console.log('Validation step', activeStep, 'champs:', fieldsToValidate);
+    
+    // Vérifier que les champs sont remplis dans formValues
+    const areFieldsFilled = fieldsToValidate.every(field => {
+      const value = formValues[field];
+      console.log(`Champ ${field}:`, value);
+      return value && value.toString().trim() !== '';
+    });
+    
+    console.log('Champs remplis?', areFieldsFilled);
+    
+    if (!areFieldsFilled) {
+      toast.error('Veuillez remplir tous les champs obligatoires');
+      return;
+    }
+    
+    // Valider avec Yup
+    try {
+      await schema.validateAt(fieldsToValidate[0], formValues);
       setActiveStep((prev) => prev + 1);
+    } catch (error) {
+      toast.error(error.message);
     }
   };
 
@@ -126,47 +159,81 @@ const CreateStudent = () => {
     setActiveStep((prev) => prev - 1);
   };
 
-  const onSubmit = async (data) => {
+  const validateAllFields = async () => {
+    try {
+      await schema.validate(formValues, { abortEarly: false });
+      return { isValid: true, errors: {} };
+    } catch (validationErrors) {
+      const errors = {};
+      if (validationErrors.inner) {
+        validationErrors.inner.forEach(error => {
+          errors[error.path] = error.message;
+        });
+      }
+      return { isValid: false, errors };
+    }
+  };
+
+  const onSubmit = async () => {
+    console.log('🚀 Début de la soumission avec formValues:', formValues);
+    
+    // Valider toutes les données
+    const validation = await validateAllFields();
+    
+    if (!validation.isValid) {
+      console.error('❌ Formulaire invalide. Erreurs:', validation.errors);
+      toast.error('Veuillez corriger les erreurs dans le formulaire');
+      return;
+    }
+    
     try {
       setLoading(true);
       
       const studentData = {
-        firstName: data.firstName,
-        lastName: data.lastName,
-        matricule: data.matricule,
-        email: data.email,
-        birthDate: data.birthDate ? new Date(data.birthDate).toISOString().split('T')[0] : null,
-        classId: data.classId,
-        parentName: data.parentName,
-        parentPhone: data.parentPhone,
-        temporaryPassword: data.temporaryPassword,
+        firstName: formValues.firstName.trim(),
+        lastName: formValues.lastName.trim(),
+        matricule: formValues.matricule.trim(),
+        email: formValues.email ? formValues.email.trim() : null,
+        birthDate: formValues.birthDate || null,
+        classId: parseInt(formValues.classId),
+        parentName: formValues.parentName ? formValues.parentName.trim() : null,
+        parentPhone: formValues.parentPhone ? formValues.parentPhone.trim() : null,
+        temporaryPassword: formValues.temporaryPassword,
       };
+
+      console.log('📤 Données envoyées au serveur:', studentData);
 
       const response = await adminAPI.createStudent(studentData);
       
+      console.log('✅ Réponse du serveur:', response);
+      
       toast.success('Apprenant créé avec succès !');
       
-      // Afficher les identifiants
       if (response.data.credentials) {
         toast(
           <Box>
-            <Typography variant="subtitle2" sx={{ mb: 1 }}>
+            <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 600 }}>
               Identifiants créés :
             </Typography>
             <Typography variant="body2">
-              Email: {response.data.credentials.email}
+              <strong>Identifiant:</strong> {response.data.credentials.email}
             </Typography>
             <Typography variant="body2">
-              Mot de passe: {response.data.credentials.password}
+              <strong>Mot de passe:</strong> {response.data.credentials.password}
             </Typography>
           </Box>,
           { duration: 10000 }
         );
       }
       
-      navigate('/admin/students');
+      setTimeout(() => {
+        navigate('/admin/students');
+      }, 1000);
+      
     } catch (error) {
-      toast.error(error.response?.data?.message || 'Erreur lors de la création');
+      console.error('❌ Erreur complète:', error);
+      console.error('📡 Réponse erreur:', error.response);
+      toast.error(error.response?.data?.message || 'Erreur lors de la création de l\'apprenant');
     } finally {
       setLoading(false);
     }
@@ -177,6 +244,12 @@ const CreateStudent = () => {
       case 0:
         return (
           <Grid container spacing={3}>
+            <Grid item xs={12}>
+              <Alert severity="info">
+                Remplissez les informations personnelles de l'apprenant. Les champs marqués d'un * sont obligatoires.
+              </Alert>
+            </Grid>
+
             <Grid item xs={12} md={6}>
               <Controller
                 name="firstName"
@@ -188,6 +261,8 @@ const CreateStudent = () => {
                     label="Prénom *"
                     error={!!errors.firstName}
                     helperText={errors.firstName?.message}
+                    value={formValues.firstName}
+                    onChange={(e) => updateFormValue('firstName', e.target.value)}
                     InputProps={{
                       startAdornment: (
                         <InputAdornment position="start">
@@ -211,6 +286,8 @@ const CreateStudent = () => {
                     label="Nom *"
                     error={!!errors.lastName}
                     helperText={errors.lastName?.message}
+                    value={formValues.lastName}
+                    onChange={(e) => updateFormValue('lastName', e.target.value)}
                   />
                 )}
               />
@@ -227,7 +304,9 @@ const CreateStudent = () => {
                     label="Matricule *"
                     error={!!errors.matricule}
                     helperText={errors.matricule?.message}
-                    placeholder="Ex: S2023001"
+                    value={formValues.matricule}
+                    onChange={(e) => updateFormValue('matricule', e.target.value)}
+                    placeholder="Ex: S2024001"
                   />
                 )}
               />
@@ -241,10 +320,12 @@ const CreateStudent = () => {
                   <TextField
                     {...field}
                     fullWidth
-                    label="Email"
+                    label="Email (optionnel)"
                     type="email"
                     error={!!errors.email}
                     helperText={errors.email?.message}
+                    value={formValues.email}
+                    onChange={(e) => updateFormValue('email', e.target.value)}
                     InputProps={{
                       startAdornment: (
                         <InputAdornment position="start">
@@ -258,35 +339,32 @@ const CreateStudent = () => {
             </Grid>
             
             <Grid item xs={12}>
-              <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={fr}>
-                <Controller
-                  name="birthDate"
-                  control={control}
-                  render={({ field }) => (
-                    <DatePicker
-                      label="Date de naissance"
-                      value={field.value}
-                      onChange={field.onChange}
-                      renderInput={(params) => (
-                        <TextField
-                          {...params}
-                          fullWidth
-                          error={!!errors.birthDate}
-                          helperText={errors.birthDate?.message}
-                          InputProps={{
-                            ...params.InputProps,
-                            startAdornment: (
-                              <InputAdornment position="start">
-                                <CalendarIcon color="action" />
-                              </InputAdornment>
-                            ),
-                          }}
-                        />
-                      )}
-                    />
-                  )}
-                />
-              </LocalizationProvider>
+              <Controller
+                name="birthDate"
+                control={control}
+                render={({ field }) => (
+                  <TextField
+                    {...field}
+                    fullWidth
+                    label="Date de naissance (optionnel)"
+                    type="date"
+                    error={!!errors.birthDate}
+                    helperText={errors.birthDate?.message}
+                    value={formValues.birthDate}
+                    onChange={(e) => updateFormValue('birthDate', e.target.value)}
+                    InputLabelProps={{
+                      shrink: true,
+                    }}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <CalendarIcon color="action" />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                )}
+              />
             </Grid>
           </Grid>
         );
@@ -295,7 +373,7 @@ const CreateStudent = () => {
         return (
           <Grid container spacing={3}>
             <Grid item xs={12}>
-              <Alert severity="info" sx={{ mb: 3 }}>
+              <Alert severity="info" sx={{ mb: 2 }}>
                 Sélectionnez la classe de l'apprenant et renseignez les informations des parents/tuteurs.
               </Alert>
             </Grid>
@@ -310,21 +388,32 @@ const CreateStudent = () => {
                     <Select
                       {...field}
                       label="Classe *"
+                      value={formValues.classId || ''}
+                      onChange={(e) => {
+                        updateFormValue('classId', e.target.value);
+                        console.log("Classe sélectionnée ID:", e.target.value);
+                      }}
                     >
-                      <MenuItem value="">Sélectionner une classe</MenuItem>
+                      <MenuItem value="">
+                        <em>Sélectionner une classe</em>
+                      </MenuItem>
                       {classes.map((classItem) => (
                         <MenuItem key={classItem.id} value={classItem.id}>
-                          {classItem.name} ({classItem.level})
-                          {classItem.principalTeacher && (
-                            <Typography variant="caption" color="textSecondary" sx={{ ml: 1 }}>
-                              - Prof principal: {classItem.principalTeacher.firstName} {classItem.principalTeacher.lastName}
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                            <Typography variant="body1">
+                              {classItem.name} ({classItem.level})
                             </Typography>
-                          )}
+                            {classItem.principalTeacher && (
+                              <Typography variant="caption" color="textSecondary">
+                                - Prof: {classItem.principalTeacher.firstName} {classItem.principalTeacher.lastName}
+                              </Typography>
+                            )}
+                          </Box>
                         </MenuItem>
                       ))}
                     </Select>
                     {errors.classId && (
-                      <Typography variant="caption" color="error">
+                      <Typography variant="caption" color="error" sx={{ mt: 0.5, ml: 2 }}>
                         {errors.classId.message}
                       </Typography>
                     )}
@@ -341,7 +430,9 @@ const CreateStudent = () => {
                   <TextField
                     {...field}
                     fullWidth
-                    label="Nom du parent/tuteur"
+                    label="Nom du parent/tuteur (optionnel)"
+                    value={formValues.parentName}
+                    onChange={(e) => updateFormValue('parentName', e.target.value)}
                     placeholder="Ex: M. Dupont Jean"
                   />
                 )}
@@ -356,8 +447,10 @@ const CreateStudent = () => {
                   <TextField
                     {...field}
                     fullWidth
-                    label="Téléphone du parent"
-                    placeholder="Ex: +243 81 234 5678"
+                    label="Téléphone du parent (optionnel)"
+                    value={formValues.parentPhone}
+                    onChange={(e) => updateFormValue('parentPhone', e.target.value)}
+                    placeholder="Ex: +229 XX XX XX XX"
                     InputProps={{
                       startAdornment: (
                         <InputAdornment position="start">
@@ -370,39 +463,40 @@ const CreateStudent = () => {
               />
             </Grid>
             
-            {watch('classId') && (
+            {formValues.classId && (
               <Grid item xs={12}>
                 <Card variant="outlined">
                   <CardContent>
-                    <Typography variant="subtitle2" gutterBottom>
+                    <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
                       Informations de la classe sélectionnée
                     </Typography>
+                    <Divider sx={{ my: 1.5 }} />
                     {(() => {
-                      const selectedClass = classes.find(c => c.id.toString() === watch('classId'));
+                      const selectedClass = classes.find(c => c.id === parseInt(formValues.classId));
                       return selectedClass ? (
                         <Box>
-                          <Typography variant="body2">
+                          <Typography variant="body2" sx={{ mb: 1 }}>
                             <strong>Classe:</strong> {selectedClass.name} ({selectedClass.level})
                           </Typography>
                           {selectedClass.principalTeacher && (
-                            <Typography variant="body2">
+                            <Typography variant="body2" sx={{ mb: 1 }}>
                               <strong>Professeur principal:</strong> {selectedClass.principalTeacher.firstName} {selectedClass.principalTeacher.lastName}
                             </Typography>
                           )}
-                          <Typography variant="body2">
+                          <Typography variant="body2" sx={{ mb: 1 }}>
                             <strong>Nombre d'étudiants:</strong> {Array.isArray(selectedClass.students) ? selectedClass.students.length : 0}
                           </Typography>
-                          {Array.isArray(selectedClass.subjects) && selectedClass.subjects.length > 0 && (
-                            <Box sx={{ mt: 1 }}>
-                              <Typography variant="body2">
-                                <strong>Matières:</strong>
+                          {Array.isArray(selectedClass.classSubjects) && selectedClass.classSubjects.length > 0 && (
+                            <Box sx={{ mt: 1.5 }}>
+                              <Typography variant="body2" sx={{ mb: 0.5 }}>
+                                <strong>Matières ({selectedClass.classSubjects.length}):</strong>
                               </Typography>
-                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                                {selectedClass.subjects.slice(0, 5).map((subject, index) => (
-                                  <Chip key={index} label={subject.name} size="small" />
+                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                {selectedClass.classSubjects.slice(0, 6).map((subject) => (
+                                  <Chip key={subject.id} label={subject.name} size="small" color="primary" variant="outlined" />
                                 ))}
-                                {selectedClass.subjects.length > 5 && (
-                                  <Chip label={`+${selectedClass.subjects.length - 5}`} size="small" />
+                                {selectedClass.classSubjects.length > 6 && (
+                                  <Chip label={`+${selectedClass.classSubjects.length - 6}`} size="small" />
                                 )}
                               </Box>
                             </Box>
@@ -444,6 +538,8 @@ const CreateStudent = () => {
                     type={showPassword ? 'text' : 'password'}
                     error={!!errors.temporaryPassword}
                     helperText={errors.temporaryPassword?.message}
+                    value={formValues.temporaryPassword}
+                    onChange={(e) => updateFormValue('temporaryPassword', e.target.value)}
                     InputProps={{
                       endAdornment: (
                         <InputAdornment position="end">
@@ -464,7 +560,7 @@ const CreateStudent = () => {
             <Grid item xs={12}>
               <Card variant="outlined">
                 <CardContent>
-                  <Typography variant="subtitle2" gutterBottom>
+                  <Typography variant="subtitle2" gutterBottom sx={{ fontWeight: 600 }}>
                     Récapitulatif
                   </Typography>
                   
@@ -476,7 +572,7 @@ const CreateStudent = () => {
                         Nom complet:
                       </Typography>
                       <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                        {watch('firstName')} {watch('lastName')}
+                        {formValues.firstName} {formValues.lastName}
                       </Typography>
                     </Grid>
                     
@@ -485,7 +581,7 @@ const CreateStudent = () => {
                         Matricule:
                       </Typography>
                       <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                        {watch('matricule')}
+                        {formValues.matricule}
                       </Typography>
                     </Grid>
                     
@@ -494,7 +590,7 @@ const CreateStudent = () => {
                         Email:
                       </Typography>
                       <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                        {watch('email') || 'Aucun'}
+                        {formValues.email || 'Non fourni'}
                       </Typography>
                     </Grid>
                     
@@ -503,42 +599,42 @@ const CreateStudent = () => {
                         Date de naissance:
                       </Typography>
                       <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                        {watch('birthDate') ? new Date(watch('birthDate')).toLocaleDateString('fr-FR') : 'Non spécifiée'}
+                        {formValues.birthDate ? new Date(formValues.birthDate).toLocaleDateString('fr-FR') : 'Non spécifiée'}
                       </Typography>
                     </Grid>
                     
-                    {watch('classId') && (
+                    {formValues.classId && (
                       <Grid item xs={12}>
                         <Typography variant="body2" color="textSecondary">
                           Classe:
                         </Typography>
                         <Typography variant="body1" sx={{ fontWeight: 500 }}>
                           {(() => {
-                            const selectedClass = classes.find(c => c.id.toString() === watch('classId'));
+                            const selectedClass = classes.find(c => c.id === parseInt(formValues.classId));
                             return selectedClass ? `${selectedClass.name} (${selectedClass.level})` : 'Non spécifiée';
                           })()}
                         </Typography>
                       </Grid>
                     )}
                     
-                    {watch('parentName') && (
+                    {formValues.parentName && (
                       <Grid item xs={12} md={6}>
                         <Typography variant="body2" color="textSecondary">
                           Parent/Tuteur:
                         </Typography>
                         <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                          {watch('parentName')}
+                          {formValues.parentName}
                         </Typography>
                       </Grid>
                     )}
                     
-                    {watch('parentPhone') && (
+                    {formValues.parentPhone && (
                       <Grid item xs={12} md={6}>
                         <Typography variant="body2" color="textSecondary">
                           Téléphone parent:
                         </Typography>
                         <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                          {watch('parentPhone')}
+                          {formValues.parentPhone}
                         </Typography>
                       </Grid>
                     )}
@@ -588,7 +684,10 @@ const CreateStudent = () => {
             ))}
           </Stepper>
 
-          <form onSubmit={handleSubmit(onSubmit)}>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            onSubmit();
+          }}>
             {renderStepContent(activeStep)}
 
             <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 4 }}>
@@ -606,6 +705,7 @@ const CreateStudent = () => {
                     <Button
                       variant="outlined"
                       onClick={() => navigate('/admin/students')}
+                      disabled={loading}
                     >
                       Annuler
                     </Button>
@@ -621,13 +721,14 @@ const CreateStudent = () => {
                         },
                       }}
                     >
-                      {loading ? 'Création...' : 'Créer l\'apprenant'}
+                      {loading ? 'Création en cours...' : 'Créer l\'apprenant'}
                     </Button>
                   </>
                 ) : (
                   <Button
                     variant="contained"
                     onClick={handleNext}
+                    disabled={loading}
                   >
                     Suivant
                   </Button>
