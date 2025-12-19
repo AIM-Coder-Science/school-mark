@@ -13,10 +13,17 @@ import {
   IconButton,
   Card,
   CardContent,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
 } from '@mui/material';
 import {
   Save as SaveIcon,
   ArrowBack as ArrowBackIcon,
+  LockReset as ResetIcon,
+  Phone as PhoneIcon,
+  Email as EmailIcon,
 } from '@mui/icons-material';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -28,19 +35,9 @@ import toast from 'react-hot-toast';
 import Loader from '../../../components/common/Loader';
 
 const specialtyOptions = [
-  'Mathématiques',
-  'Physique',
-  'Chimie',
-  'Sciences',
-  'Français',
-  'Anglais',
-  'Histoire-Géographie',
-  'Philosophie',
-  'Éducation Physique',
-  'Informatique',
-  'Technologie',
-  'Arts Plastiques',
-  'Musique',
+  'Mathématiques', 'Physique', 'Chimie', 'Sciences', 'Français', 'Anglais',
+  'Histoire-Géographie', 'Philosophie', 'Éducation Physique', 'Informatique',
+  'Technologie', 'Arts Plastiques', 'Musique',
 ];
 
 const EditTeacher = () => {
@@ -48,21 +45,23 @@ const EditTeacher = () => {
   const { teacherId } = useParams();
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [openResetDialog, setOpenResetDialog] = useState(false);
+  const [newPassword, setNewPassword] = useState('Teacher123!');
 
   const schema = yup.object().shape({
     firstName: yup.string().required('Le prénom est requis'),
     lastName: yup.string().required('Le nom est requis'),
     matricule: yup.string().required('Le matricule est requis'),
-    email: yup.string().email('Email invalide').nullable(),
+    email: yup.string().email('Email invalide').nullable().transform((v) => v === "" ? null : v),
     phone: yup.string().nullable(),
-    specialties: yup.array().min(1, 'Au moins une spécialité est requise'),
+    specialties: yup.array().min(1, 'Au moins une spécialité est requise').required(),
   });
 
   const {
     control,
     handleSubmit,
-    watch,
     setValue,
+    watch,
     formState: { errors },
   } = useForm({
     resolver: yupResolver(schema),
@@ -76,8 +75,13 @@ const EditTeacher = () => {
     },
   });
 
+  // On surveille les valeurs pour le récapitulatif
+  const watchedValues = watch();
+
   useEffect(() => {
-    fetchTeacherData();
+    if (teacherId) {
+      fetchTeacherData();
+    }
   }, [teacherId]);
 
   const fetchTeacherData = async () => {
@@ -86,15 +90,22 @@ const EditTeacher = () => {
       const response = await adminAPI.getTeacher(teacherId);
       const teacher = response.data.data;
 
-      setValue('firstName', teacher.firstName);
-      setValue('lastName', teacher.lastName);
-      setValue('matricule', teacher.matricule);
+      setValue('firstName', teacher.firstName || '');
+      setValue('lastName', teacher.lastName || '');
+      setValue('matricule', teacher.matricule || '');
       setValue('email', teacher.email || '');
       setValue('phone', teacher.phone || '');
-      setValue('specialties', teacher.specialties || []);
+      
+      // Gestion sécurisée des spécialités (String ou Array)
+      let specs = teacher.specialties;
+      if (typeof specs === 'string') {
+        try { specs = JSON.parse(specs); } catch (e) { specs = []; }
+      }
+      setValue('specialties', Array.isArray(specs) ? specs : []);
+      
     } catch (error) {
-      console.error('Erreur chargement enseignant:', error);
-      toast.error('Erreur lors du chargement des données');
+      console.error('Erreur chargement:', error);
+      toast.error('Impossible de charger les données');
       navigate('/admin/teachers');
     } finally {
       setInitialLoading(false);
@@ -104,150 +115,78 @@ const EditTeacher = () => {
   const onSubmit = async (data) => {
     try {
       setLoading(true);
-      
-      const teacherData = {
-        firstName: data.firstName,
-        lastName: data.lastName,
-        matricule: data.matricule,
-        email: data.email || null,
-        phone: data.phone || null,
-        specialties: data.specialties,
-      };
-
-      await adminAPI.updateTeacher(teacherId, teacherData);
-      
-      toast.success('Enseignant mis à jour avec succès !');
+      await adminAPI.updateTeacher(teacherId, data);
+      toast.success('Enseignant mis à jour !');
       navigate('/admin/teachers');
     } catch (error) {
-      console.error('Erreur mise à jour:', error);
       toast.error(error.response?.data?.message || 'Erreur lors de la mise à jour');
     } finally {
       setLoading(false);
     }
   };
 
-  if (initialLoading) {
-    return <Loader />;
-  }
+  const handleResetPassword = async () => {
+    try {
+      setLoading(true);
+      // Supposons que ton API admin a cette route
+      await adminAPI.resetUserPassword(teacherId, { password: newPassword });
+      toast.success('Mot de passe réinitialisé avec succès');
+      setOpenResetDialog(false);
+    } catch (error) {
+      toast.error('Erreur lors de la réinitialisation');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (initialLoading) return <Loader />;
 
   return (
     <>
-      <Helmet>
-        <title>Modifier l'enseignant - Administration</title>
-      </Helmet>
+      <Helmet><title>Modifier Enseignant | Admin</title></Helmet>
 
       <Box sx={{ mb: 4 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-          <IconButton onClick={() => navigate('/admin/teachers')}>
-            <ArrowBackIcon />
-          </IconButton>
+          <IconButton onClick={() => navigate('/admin/teachers')}><ArrowBackIcon /></IconButton>
           <Box>
             <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
-              Modifier l'enseignant
+              Modifier {watchedValues.firstName} {watchedValues.lastName}
             </Typography>
-            <Typography variant="body1" color="textSecondary">
-              Modifiez les informations de l'enseignant
-            </Typography>
+            <Typography variant="body2" color="textSecondary">Matricule : {watchedValues.matricule}</Typography>
           </Box>
         </Box>
 
         <Paper sx={{ p: 3, borderRadius: 2 }}>
           <form onSubmit={handleSubmit(onSubmit)}>
             <Grid container spacing={3}>
-              <Grid item xs={12}>
-                <Alert severity="info">
-                  Pour modifier les affectations de classes et matières, veuillez contacter l'administrateur système.
-                </Alert>
-              </Grid>
-
-              {/* Informations personnelles */}
-              <Grid item xs={12}>
-                <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
-                  Informations personnelles
-                </Typography>
-              </Grid>
-
               <Grid item xs={12} md={6}>
                 <Controller
                   name="firstName"
                   control={control}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      fullWidth
-                      label="Prénom *"
-                      error={!!errors.firstName}
-                      helperText={errors.firstName?.message}
-                    />
-                  )}
+                  render={({ field }) => <TextField {...field} fullWidth label="Prénom *" error={!!errors.firstName} helperText={errors.firstName?.message} />}
                 />
               </Grid>
-              
               <Grid item xs={12} md={6}>
                 <Controller
                   name="lastName"
                   control={control}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      fullWidth
-                      label="Nom *"
-                      error={!!errors.lastName}
-                      helperText={errors.lastName?.message}
-                    />
-                  )}
+                  render={({ field }) => <TextField {...field} fullWidth label="Nom *" error={!!errors.lastName} helperText={errors.lastName?.message} />}
                 />
               </Grid>
-              
               <Grid item xs={12} md={6}>
                 <Controller
                   name="matricule"
                   control={control}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      fullWidth
-                      label="Matricule *"
-                      error={!!errors.matricule}
-                      helperText={errors.matricule?.message}
-                    />
-                  )}
+                  render={({ field }) => <TextField {...field} fullWidth label="Matricule *" error={!!errors.matricule} helperText={errors.matricule?.message} />}
                 />
               </Grid>
-              
               <Grid item xs={12} md={6}>
                 <Controller
                   name="email"
                   control={control}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      fullWidth
-                      label="Email"
-                      type="email"
-                      error={!!errors.email}
-                      helperText={errors.email?.message}
-                    />
-                  )}
+                  render={({ field }) => <TextField {...field} fullWidth label="Email" error={!!errors.email} helperText={errors.email?.message} />}
                 />
               </Grid>
-              
-              <Grid item xs={12} md={6}>
-                <Controller
-                  name="phone"
-                  control={control}
-                  render={({ field }) => (
-                    <TextField
-                      {...field}
-                      fullWidth
-                      label="Téléphone"
-                      error={!!errors.phone}
-                      helperText={errors.phone?.message}
-                    />
-                  )}
-                />
-              </Grid>
-              
               <Grid item xs={12}>
                 <Controller
                   name="specialties"
@@ -256,95 +195,40 @@ const EditTeacher = () => {
                     <Autocomplete
                       multiple
                       options={specialtyOptions}
-                      value={field.value}
-                      onChange={(event, newValue) => field.onChange(newValue)}
-                      renderInput={(params) => (
-                        <TextField
-                          {...params}
-                          label="Spécialités *"
-                          error={!!errors.specialties}
-                          helperText={errors.specialties?.message}
-                        />
-                      )}
-                      renderTags={(value, getTagProps) =>
-                        value.map((option, index) => (
-                          <Chip
-                            label={option}
-                            {...getTagProps({ index })}
-                            size="small"
-                          />
-                        ))
+                      value={field.value || []}
+                      onChange={(_, val) => field.onChange(val)}
+                      renderInput={(params) => <TextField {...params} label="Spécialités *" error={!!errors.specialties} helperText={errors.specialties?.message} />}
+                      renderTags={(tagValue, getTagProps) =>
+                        tagValue.map((option, index) => {
+                          const { key, ...tagProps } = getTagProps({ index });
+                          return <Chip key={key} label={option} size="small" {...tagProps} />;
+                        })
                       }
                     />
                   )}
                 />
               </Grid>
 
-              {/* Récapitulatif */}
               <Grid item xs={12}>
-                <Card variant="outlined" sx={{ mt: 2 }}>
-                  <CardContent>
-                    <Typography variant="subtitle2" gutterBottom>
-                      Récapitulatif
-                    </Typography>
-                    
-                    <Divider sx={{ my: 2 }} />
-                    
-                    <Grid container spacing={2}>
-                      <Grid item xs={12} md={6}>
-                        <Typography variant="body2" color="textSecondary">
-                          Nom complet:
-                        </Typography>
-                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                          {watch('firstName')} {watch('lastName')}
-                        </Typography>
-                      </Grid>
-                      
-                      <Grid item xs={12} md={6}>
-                        <Typography variant="body2" color="textSecondary">
-                          Matricule:
-                        </Typography>
-                        <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                          {watch('matricule')}
-                        </Typography>
-                      </Grid>
-                      
-                      <Grid item xs={12}>
-                        <Typography variant="body2" color="textSecondary">
-                          Spécialités:
-                        </Typography>
-                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-                          {watch('specialties')?.map((spec, index) => (
-                            <Chip key={index} label={spec} size="small" color="primary" variant="outlined" />
-                          ))}
-                        </Box>
-                      </Grid>
-                    </Grid>
+                <Divider sx={{ my: 1 }} />
+                <Typography variant="h6" sx={{ mb: 2, color: 'error.main', display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <ResetIcon fontSize="small" /> Zone de sécurité
+                </Typography>
+                <Card variant="outlined" sx={{ borderColor: 'error.light', bgcolor: '#fff5f5' }}>
+                  <CardContent sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Box>
+                      <Typography variant="subtitle2">Réinitialiser le mot de passe</Typography>
+                      <Typography variant="caption" color="textSecondary">L'enseignant devra utiliser le nouveau mot de passe pour se connecter.</Typography>
+                    </Box>
+                    <Button variant="outlined" color="error" onClick={() => setOpenResetDialog(true)}>Réinitialiser</Button>
                   </CardContent>
                 </Card>
               </Grid>
 
-              {/* Actions */}
               <Grid item xs={12}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
-                  <Button
-                    variant="outlined"
-                    onClick={() => navigate('/admin/teachers')}
-                  >
-                    Annuler
-                  </Button>
-                  <Button
-                    type="submit"
-                    variant="contained"
-                    startIcon={<SaveIcon />}
-                    disabled={loading}
-                    sx={{
-                      background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
-                      '&:hover': {
-                        background: 'linear-gradient(45deg, #1565c0, #1976d2)',
-                      },
-                    }}
-                  >
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 2, mt: 3 }}>
+                  <Button variant="outlined" onClick={() => navigate('/admin/teachers')}>Annuler</Button>
+                  <Button type="submit" variant="contained" startIcon={<SaveIcon />} disabled={loading} sx={{ px: 4 }}>
                     {loading ? 'Enregistrement...' : 'Enregistrer les modifications'}
                   </Button>
                 </Box>
@@ -353,6 +237,25 @@ const EditTeacher = () => {
           </form>
         </Paper>
       </Box>
+
+      {/* Dialogue de réinitialisation */}
+      <Dialog open={openResetDialog} onClose={() => setOpenResetDialog(false)}>
+        <DialogTitle>Nouveau mot de passe</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }}>Définissez un mot de passe temporaire pour cet enseignant.</Typography>
+          <TextField
+            fullWidth
+            variant="outlined"
+            label="Mot de passe"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenResetDialog(false)}>Annuler</Button>
+          <Button onClick={handleResetPassword} color="error" variant="contained">Confirmer</Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 };

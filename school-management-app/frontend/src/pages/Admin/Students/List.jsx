@@ -60,14 +60,20 @@ const StudentsList = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
+      
+      // Appeler getAllStudents au lieu de getStudents
       const [studentsRes, classesRes] = await Promise.all([
         adminAPI.getAllStudents(),
         adminAPI.getAllClasses(),
       ]);
       
+      console.log('Étudiants chargés:', studentsRes.data);
+      console.log('Classes chargées:', classesRes.data);
+      
       setStudents(studentsRes.data.data || []);
       setClasses(classesRes.data.data || []);
     } catch (error) {
+      console.error('Erreur chargement données:', error);
       toast.error('Erreur lors du chargement des données');
     } finally {
       setLoading(false);
@@ -92,6 +98,7 @@ const StudentsList = () => {
       toast.success('Apprenant supprimé avec succès');
       fetchData();
     } catch (error) {
+      console.error('Erreur suppression:', error);
       toast.error('Erreur lors de la suppression');
     } finally {
       setDeleteDialog(null);

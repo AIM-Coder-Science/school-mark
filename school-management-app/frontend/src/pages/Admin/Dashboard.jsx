@@ -126,7 +126,7 @@ const RecentActivityItem = ({ icon, title, description, time, color = 'primary' 
       }
       secondary={
         <React.Fragment>
-          <Typography variant="body2" color="textSecondary">
+          <Typography component="span" variant="body2" color="textSecondary">
             {description}
           </Typography>
           <Typography variant="caption" color="textSecondary">

@@ -22,7 +22,7 @@ export const adminAPI = {
   
   // Students
   createStudent: (data) => axiosInstance.post('/admin/students', data),
-  getStudents: (classId) => axiosInstance.get(`/admin/students${classId ? `?classId=${classId}` : ''}`),
+  getAllStudents: (classId) => axiosInstance.get(`/admin/students${classId ? `?classId=${classId}` : ''}`),
   getStudent: (id) => axiosInstance.get(`/admin/students/${id}`), // ✅ Ajouté
   updateStudent: (id, data) => axiosInstance.put(`/admin/students/${id}`, data), // ✅ Ajouté
   //deleteStudent: (id) => axiosInstance.delete(`/admin/students/${id}`), // ✅ Ajouté

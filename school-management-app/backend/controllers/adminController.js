@@ -135,17 +135,145 @@ const createTeacher = async (req, res) => {
         });
     }
 };
+/*
+const getTeacher = async (req, res) => {
+    try {
+        const { teacherId } = req.params;
+
+        // Requête SQL directe pour obtenir les classes et matières enseignées par ce prof
+        const [results] = await sequelize.query(`
+            SELECT 
+                t.id as teacherId,
+                t.firstName,
+                t.lastName,
+                t.matricule,
+                t.email,
+                t.phone,
+                t.specialties,
+                c.id as classId,
+                c.name as className,
+                c.level as classLevel,
+                s.id as subjectId,
+                s.name as subjectName,
+                s.code as subjectCode,
+                pt.id as principalTeacherId,
+                pt.firstName as principalFirstName,
+                pt.lastName as principalLastName,
+                (
+                    SELECT COUNT(*)
+                    FROM students st
+                    WHERE st.classId = c.id
+                ) as studentCount
+            FROM teachers t
+            LEFT JOIN teacher_class_subject tcs ON t.id = tcs.teacherId
+            LEFT JOIN classes c ON tcs.classId = c.id
+            LEFT JOIN subjects s ON tcs.subjectId = s.id
+            LEFT JOIN teachers pt ON c.teacherPrincipalId = pt.id
+            WHERE t.id = ?
+            ORDER BY c.level, c.name, s.name
+        `, {
+            replacements: [teacherId]
+        });
+
+        if (results.length === 0) {
+            return res.status(404).json({
+                success: false,
+                message: 'Enseignant non trouvé'
+            });
+        }
+
+        // Structure les données
+        const teacherInfo = results[0];
+        const classesMap = new Map();
+
+        results.forEach(row => {
+            if (!row.classId) return; // Si pas de classe assignée
+            
+            if (!classesMap.has(row.classId)) {
+                classesMap.set(row.classId, {
+                    id: row.classId,
+                    name: row.className,
+                    level: row.classLevel,
+                    studentCount: row.studentCount,
+                    principalTeacher: row.principalTeacherId ? {
+                        id: row.principalTeacherId,
+                        firstName: row.principalFirstName,
+                        lastName: row.principalLastName
+                    } : null,
+                    subjectsTaught: []
+                });
+            }
+
+            // Ajouter la matière si elle existe
+            if (row.subjectId) {
+                const classData = classesMap.get(row.classId);
+                classData.subjectsTaught.push({
+                    id: row.subjectId,
+                    name: row.subjectName,
+                    code: row.subjectCode
+                });
+            }
+        });
+
+        // Récupérer aussi les classes où l'enseignant est professeur principal
+        const principalClasses = await Class.findAll({
+            where: { teacherPrincipalId: teacherId },
+            attributes: ['id', 'name', 'level']
+        });
+
+        // Récupérer les infos de l'utilisateur
+        const user = await User.findByPk(teacherInfo.userId, {
+            attributes: ['id', 'email', 'isActive', 'created_at']
+        });
+
+        // Construire la réponse
+        const response = {
+            id: teacherInfo.teacherId,
+            firstName: teacherInfo.firstName,
+            lastName: teacherInfo.lastName,
+            matricule: teacherInfo.matricule,
+            email: teacherInfo.email,
+            phone: teacherInfo.phone,
+            specialties: teacherInfo.specialties,
+            user: user,
+            assignedClasses: Array.from(classesMap.values()),
+            principalOfClasses: principalClasses,
+            teacherSubjects: Array.from(new Set(
+                results
+                    .filter(row => row.subjectId)
+                    .map(row => ({
+                        id: row.subjectId,
+                        name: row.subjectName,
+                        code: row.subjectCode
+                    }))
+            ))
+        };
+
+        res.json({
+            success: true,
+            data: response
+        });
+    } catch (error) {
+        console.error('Erreur récupération enseignant:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur'
+        });
+    }
+};
+*/
 
 const getTeacher = async (req, res) => {
     try {
         const { teacherId } = req.params;
 
+        // Récupérer l'enseignant avec toutes les informations nécessaires
         const teacher = await Teacher.findByPk(teacherId, {
             include: [
                 {
                     model: User,
                     as: 'user',
-                    attributes: ['id', 'email', 'isActive', 'created_at']
+                    attributes: ['id', 'email', 'is_active', 'created_at']
                 },
                 {
                     model: Class,
@@ -153,14 +281,14 @@ const getTeacher = async (req, res) => {
                     through: { attributes: [] },
                     include: [
                         {
-                            model: Subject,
-                            as: 'classSubjects',
-                            through: { attributes: ['coefficient'] }
-                        },
-                        {
                             model: Student,
                             as: 'students',
                             attributes: ['id']
+                        },
+                        {
+                            model: Teacher,
+                            as: 'principalTeacher',
+                            attributes: ['id', 'first_name', 'last_name', 'matricule']
                         }
                     ]
                 },
@@ -179,9 +307,93 @@ const getTeacher = async (req, res) => {
             });
         }
 
+        // Récupérer toutes les matières enseignées par ce prof
+        // Remplacer la partie Subject.findAll par ceci :
+        const assignments = await TeacherClassSubject.findAll({
+            where: { teacherId },
+            include: [{
+                model: Subject,
+                attributes: ['id', 'name', 'code']
+            }]
+        });
+
+        const subjectsByClass = {};
+        assignments.forEach(assign => {
+        if (!subjectsByClass[assign.classId]) {
+            subjectsByClass[assign.classId] = [];
+        }
+        subjectsByClass[assign.classId].push({
+            id: assign.Subject.id,
+            name: assign.Subject.name,
+            code: assign.Subject.code
+        });
+        });
+
+        // Récupérer toutes les matières de chaque classe (pour référence)
+        const classIds = teacher.assignedClasses?.map(c => c.id) || [];
+        const classSubjects = await Class.findAll({
+            where: { id: classIds },
+            include: [{
+                model: Subject,
+                as: 'classSubjects',
+                through: { attributes: ['coefficient'] },
+                attributes: ['id', 'name', 'code']
+            }],
+            attributes: ['id']
+        });
+
+        // Créer un mapping des matières par classe
+        const allSubjectsByClass = {};
+        classSubjects.forEach(cls => {
+            allSubjectsByClass[cls.id] = cls.classSubjects || [];
+        });
+
+        // Préparer la réponse formatée
+        const formattedTeacher = {
+            id: teacher.id,
+            firstName: teacher.first_name,
+            lastName: teacher.last_name,
+            matricule: teacher.matricule,
+            email: teacher.email,
+            phone: teacher.phone,
+            specialties: teacher.specialties,
+            userId: teacher.userId,
+            createdBy: teacher.createdBy,
+            createdAt: teacher.created_at,
+            updatedAt: teacher.updated_at,
+            user: teacher.user,
+            assignedClasses: teacher.assignedClasses?.map(classItem => ({
+                id: classItem.id,
+                name: classItem.name,
+                level: classItem.level,
+                // Matières enseignées par ce prof dans cette classe
+                subjectsTaught: subjectsByClass[classItem.id] || [],
+                // Toutes les matières de la classe (pour référence)
+                allSubjects: allSubjectsByClass[classItem.id] || [],
+                studentCount: classItem.students?.length || 0,
+                principalTeacher: classItem.principalTeacher ? {
+                    id: classItem.principalTeacher.id,
+                    firstName: classItem.principalTeacher.firstName,
+                    lastName: classItem.principalTeacher.lastName,
+                    matricule: classItem.principalTeacher.matricule
+                } : null
+            })) || [],
+            principalOfClasses: teacher.principalOfClasses?.map(cls => ({
+                id: cls.id,
+                name: cls.name,
+                level: cls.level
+            })) || [],
+            // Toutes les matières enseignées par ce prof (toutes classes confondues)
+            teacherSubjects: Array.from(new Set(assignments.map(s => ({
+                id: s.id,
+                name: s.name,
+                code: s.code
+            }))))
+        };
+
         res.json({
             success: true,
-            data: teacher
+            data: formattedTeacher
         });
     } catch (error) {
         console.error('Erreur récupération enseignant:', error);
@@ -191,7 +403,6 @@ const getTeacher = async (req, res) => {
         });
     }
 };
-
 
 // @desc    Obtenir tous les enseignants
 // @route   GET /api/admin/teachers

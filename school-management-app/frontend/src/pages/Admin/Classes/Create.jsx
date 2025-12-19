@@ -71,8 +71,8 @@ const CreateClass = () => {
     try {
       setLoading(true);
       const [teachersRes, subjectsRes] = await Promise.all([
-        adminAPI.getTeachers(),
-        adminAPI.getSubjects(),
+        adminAPI.getAllTeachers(),
+        adminAPI.getAllSubjects(),
       ]);
 
       setTeachers(teachersRes.data.data || []);

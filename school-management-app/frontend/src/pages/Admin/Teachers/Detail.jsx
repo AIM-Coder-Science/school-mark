@@ -31,6 +31,7 @@ import {
   Phone as PhoneIcon,
   Badge as BadgeIcon,
   Book as BookIcon,
+  Groups as GroupsIcon,
 } from '@mui/icons-material';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -52,6 +53,7 @@ const TeacherDetail = () => {
     try {
       setLoading(true);
       const response = await adminAPI.getTeacher(teacherId);
+      console.log('Données enseignant reçues:', response.data.data);
       setTeacherData(response.data.data);
     } catch (error) {
       console.error('Erreur chargement enseignant:', error);
@@ -70,10 +72,14 @@ const TeacherDetail = () => {
     return null;
   }
 
+  // Préparation du titre sécurisé pour Helmet
+  const pageTitle = `${teacherData.firstName || ''} ${teacherData.lastName || ''} - Détails`;
+
   return (
     <>
       <Helmet>
-        <title>{teacherData.firstName} {teacherData.lastName} - Détails</title>
+        {/* Correction Helmet : Utilisation d'une string unique entre accolades */}
+        <title>{pageTitle}</title>
       </Helmet>
 
       <Box sx={{ mb: 4 }}>
@@ -119,7 +125,8 @@ const TeacherDetail = () => {
                       mb: 2
                     }}
                   >
-                    {teacherData.firstName[0]}{teacherData.lastName[0]}
+                    {/* Sécurité sur les initiales */}
+                    {(teacherData.firstName?.[0] || '') + (teacherData.lastName?.[0] || '')}
                   </Avatar>
                   <Typography variant="h6" sx={{ fontWeight: 600, textAlign: 'center' }}>
                     {teacherData.firstName} {teacherData.lastName}
@@ -175,16 +182,19 @@ const TeacherDetail = () => {
 
                 <Divider sx={{ my: 2 }} />
 
-                {teacherData.specialties && teacherData.specialties.length > 0 && (
+                {teacherData.specialties && (
                   <Box>
                     <Typography variant="body2" color="textSecondary" gutterBottom>
                       Spécialités:
                     </Typography>
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                      {teacherData.specialties.map((spec, index) => (
+                      {(Array.isArray(teacherData.specialties) 
+                        ? teacherData.specialties 
+                        : teacherData.specialties.split(',')
+                      ).map((spec, index) => (
                         <Chip
                           key={index}
-                          label={spec}
+                          label={spec.trim()}
                           size="small"
                           color="primary"
                           variant="outlined"
@@ -258,10 +268,21 @@ const TeacherDetail = () => {
                   <Grid item xs={6}>
                     <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="h3" color="primary" sx={{ fontWeight: 700 }}>
-                        0
+                        {teacherData.teacherSubjects?.length || 0}
                       </Typography>
                       <Typography variant="body2" color="textSecondary">
-                        Notes saisies
+                        Matières
+                      </Typography>
+                    </Box>
+                  </Grid>
+                  
+                  <Grid item xs={6}>
+                    <Box sx={{ textAlign: 'center' }}>
+                      <Typography variant="h3" color="primary" sx={{ fontWeight: 700 }}>
+                        {teacherData.principalOfClasses?.length || 0}
+                      </Typography>
+                      <Typography variant="body2" color="textSecondary">
+                        Principales
                       </Typography>
                     </Box>
                   </Grid>
@@ -270,14 +291,14 @@ const TeacherDetail = () => {
             </Card>
           </Grid>
 
-          {/* Affectations */}
+          {/* Affectations par classe */}
           <Grid item xs={12}>
             <Card>
               <CardContent>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
                   <BookIcon color="primary" />
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    Affectations (Classe - Matière)
+                    Affectations par classe
                   </Typography>
                 </Box>
                 
@@ -290,46 +311,58 @@ const TeacherDetail = () => {
                         <TableRow>
                           <TableCell><strong>Classe</strong></TableCell>
                           <TableCell><strong>Niveau</strong></TableCell>
-                          <TableCell><strong>Matières enseignées</strong></TableCell>
+                          <TableCell><strong>Matières</strong></TableCell>
                           <TableCell><strong>Effectif</strong></TableCell>
+                          <TableCell><strong>Titulaire</strong></TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {teacherData.assignedClasses.map((classItem) => (
-                          <TableRow key={classItem.id}>
-                            <TableCell>{classItem.name}</TableCell>
-                            <TableCell>{classItem.level}</TableCell>
-                            <TableCell>
-                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                {classItem.classSubjects?.map((subject) => (
-                                  <Chip
-                                    key={subject.id}
-                                    label={subject.name}
-                                    size="small"
-                                    color="primary"
-                                    variant="outlined"
-                                  />
-                                )) || <Typography variant="body2" color="textSecondary">Aucune</Typography>}
-                              </Box>
-                            </TableCell>
-                            <TableCell>
-                              {classItem.students?.length || 0} élèves
-                            </TableCell>
-                          </TableRow>
-                        ))}
+                        {teacherData.assignedClasses.map((classItem) => {
+                          const isPrincipal = classItem.principalTeacher?.id === parseInt(teacherId);
+
+                          return (
+                            <TableRow key={classItem.id}>
+                              <TableCell>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                    {classItem.name}
+                                  </Typography>
+                                  {isPrincipal && (
+                                    <Chip label="Titulaire" size="small" color="success" variant="outlined" />
+                                  )}
+                                </Box>
+                              </TableCell>
+                              <TableCell>{classItem.level}</TableCell>
+                              <TableCell>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                  {classItem.subjectsTaught?.map((subject) => (
+                                    <Chip key={subject.id} label={subject.name} size="small" variant="outlined" />
+                                  ))}
+                                </Box>
+                              </TableCell>
+                              <TableCell>{classItem.studentCount || 0} élèves</TableCell>
+                              <TableCell>
+                                {classItem.principalTeacher ? (
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                    <Avatar sx={{ width: 24, height: 24, fontSize: '0.7rem' }}>
+                                      {(classItem.principalTeacher.firstName?.[0] || '') + (classItem.principalTeacher.lastName?.[0] || '')}
+                                    </Avatar>
+                                    <Typography variant="body2">
+                                      {classItem.principalTeacher.firstName} {classItem.principalTeacher.lastName}
+                                    </Typography>
+                                  </Box>
+                                ) : 'Non défini'}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </TableContainer>
                 ) : (
-                  <Box sx={{ textAlign: 'center', py: 5 }}>
-                    <BookIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
-                    <Typography variant="h6" color="textSecondary" gutterBottom>
-                      Aucune affectation
-                    </Typography>
-                    <Typography variant="body2" color="textSecondary">
-                      Cet enseignant n'est pas encore affecté à des classes
-                    </Typography>
-                  </Box>
+                  <Typography sx={{ py: 3, textAlign: 'center' }} color="textSecondary">
+                    Aucune affectation trouvée
+                  </Typography>
                 )}
               </CardContent>
             </Card>

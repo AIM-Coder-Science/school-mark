@@ -121,7 +121,7 @@ const CreateTeacher = () => {
     try {
       setLoading(true);
       const [classesRes, subjectsRes] = await Promise.all([
-        adminAPI.getClasses(),
+        adminAPI.getAllClasses(),
         // Note: Vous devrez créer un endpoint pour les matières
         adminAPI.getAllSubjects()
       ]);
