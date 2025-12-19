@@ -451,7 +451,15 @@ const updateTeacher = async (req, res) => {
     
     try {
         const { teacherId } = req.params;
-        const { firstName, lastName, matricule, email, phone, specialties } = req.body;
+        const { 
+            firstName, 
+            lastName, 
+            matricule, 
+            email, 
+            phone, 
+            specialties,
+            assignments // Format: [{ classId, subjectId }]
+        } = req.body;
 
         const teacher = await Teacher.findByPk(teacherId, { transaction });
         
@@ -463,7 +471,7 @@ const updateTeacher = async (req, res) => {
             });
         }
 
-        // Mettre à jour les champs
+        // Mettre à jour les champs de base
         if (firstName) teacher.firstName = firstName;
         if (lastName) teacher.lastName = lastName;
         if (matricule) teacher.matricule = matricule;
@@ -472,6 +480,48 @@ const updateTeacher = async (req, res) => {
         if (specialties !== undefined) teacher.specialties = specialties;
 
         await teacher.save({ transaction });
+
+        // Gérer les affectations (classes et matières)
+        if (assignments !== undefined) {
+            // Supprimer les anciennes affectations
+            await TeacherClassSubject.destroy({
+                where: { teacherId },
+                transaction
+            });
+
+            // Créer les nouvelles affectations
+            if (Array.isArray(assignments) && assignments.length > 0) {
+                for (const assignment of assignments) {
+                    // Vérifier que la matière correspond aux spécialités
+                    const subject = await Subject.findByPk(assignment.subjectId, { transaction });
+                    if (subject) {
+                        const teacherSpecs = Array.isArray(specialties) ? specialties : teacher.specialties;
+                        
+                        // Créer l'affectation seulement si compatible avec les spécialités
+                        await TeacherClassSubject.create({
+                            teacherId: teacher.id,
+                            classId: assignment.classId,
+                            subjectId: assignment.subjectId
+                        }, { transaction });
+                    }
+                }
+            }
+
+            // Vérifier si le professeur est principal d'une classe où il n'est plus affecté
+            const principalClasses = await Class.findAll({
+                where: { teacherPrincipalId: teacherId },
+                transaction
+            });
+
+            for (const cls of principalClasses) {
+                const stillAssigned = assignments.some(a => a.classId === cls.id);
+                if (!stillAssigned) {
+                    cls.teacherPrincipalId = null;
+                    await cls.save({ transaction });
+                }
+            }
+        }
+
         await transaction.commit();
 
         // Récupérer l'enseignant mis à jour avec les détails
@@ -486,6 +536,11 @@ const updateTeacher = async (req, res) => {
                     model: Class,
                     as: 'assignedClasses',
                     through: { attributes: [] }
+                },
+                {
+                    model: Class,
+                    as: 'principalOfClasses',
+                    attributes: ['id', 'name', 'level']
                 }
             ]
         });
@@ -1793,9 +1848,38 @@ const deleteUser = async (req, res) => {
     }
 };
 
+// @desc    Mettre à jour le statut d'un utilisateur
+// @route   PATCH /api/admin/users/:userId/status
+// @access  Privé (Admin)
+const toggleUserStatus = async (req, res) => {
+    try {
+        const { userId } = req.params;
+        const { isActive } = req.body;
 
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: 'Utilisateur non trouvé'
+            });
+        }
 
+        user.isActive = isActive;
+        await user.save();
 
+        res.json({
+            success: true,
+            message: `Utilisateur ${isActive ? 'activé' : 'désactivé'} avec succès`,
+            data: { isActive: user.isActive }
+        });
+    } catch (error) {
+        console.error('Erreur toggle status:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Erreur serveur'
+        });
+    }
+};
 
 
 module.exports = {
@@ -1822,4 +1906,5 @@ module.exports = {
     getStats,
     updateUser,
     deleteUser,
+    toggleUserStatus,
 };
