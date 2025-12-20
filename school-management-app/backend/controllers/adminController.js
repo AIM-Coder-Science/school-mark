@@ -263,6 +263,9 @@ const getTeacher = async (req, res) => {
 };
 */
 
+// @desc    Obtenir un enseignant par ID (version améliorée)
+// @route   GET /api/admin/teachers/:teacherId
+// @access  Privé (Admin)
 const getTeacher = async (req, res) => {
     try {
         const { teacherId } = req.params;
@@ -273,7 +276,7 @@ const getTeacher = async (req, res) => {
                 {
                     model: User,
                     as: 'user',
-                    attributes: ['id', 'email', 'is_active', 'created_at']
+                    attributes: ['id', 'email', 'isActive', 'created_at']
                 },
                 {
                     model: Class,
@@ -307,8 +310,7 @@ const getTeacher = async (req, res) => {
             });
         }
 
-        // Récupérer toutes les matières enseignées par ce prof
-        // Remplacer la partie Subject.findAll par ceci :
+        // Récupérer les matières enseignées par ce prof
         const assignments = await TeacherClassSubject.findAll({
             where: { teacherId },
             include: [{
@@ -317,26 +319,34 @@ const getTeacher = async (req, res) => {
             }]
         });
 
+        // Organiser les matières par classe
         const subjectsByClass = {};
         assignments.forEach(assign => {
-        if (!subjectsByClass[assign.classId]) {
-            subjectsByClass[assign.classId] = [];
-        }
-        subjectsByClass[assign.classId].push({
-            id: assign.Subject.id,
-            name: assign.Subject.name,
-            code: assign.Subject.code
-        });
+            if (!subjectsByClass[assign.classId]) {
+                subjectsByClass[assign.classId] = [];
+            }
+            if (assign.Subject) {
+                subjectsByClass[assign.classId].push({
+                    id: assign.Subject.id,
+                    name: assign.Subject.name,
+                    code: assign.Subject.code
+                });
+            }
         });
 
-        // Récupérer toutes les matières de chaque classe (pour référence)
+        // Récupérer toutes les matières du système (pour référence)
+        const allSubjects = await Subject.findAll({
+            attributes: ['id', 'name', 'code']
+        });
+
+        // Récupérer les matières de chaque classe
         const classIds = teacher.assignedClasses?.map(c => c.id) || [];
         const classSubjects = await Class.findAll({
             where: { id: classIds },
             include: [{
                 model: Subject,
                 as: 'classSubjects',
-                through: { attributes: ['coefficient'] },
+                through: { attributes: [] },
                 attributes: ['id', 'name', 'code']
             }],
             attributes: ['id']
@@ -348,47 +358,74 @@ const getTeacher = async (req, res) => {
             allSubjectsByClass[cls.id] = cls.classSubjects || [];
         });
 
+        // Normaliser les spécialités
+        let specialties = [];
+        if (teacher.specialties) {
+            if (Array.isArray(teacher.specialties)) {
+                specialties = teacher.specialties;
+            } else if (typeof teacher.specialties === 'string') {
+                try {
+                    // Essayer de parser comme JSON
+                    specialties = JSON.parse(teacher.specialties);
+                } catch (e) {
+                    // Sinon, traiter comme une chaîne séparée par des virgules
+                    specialties = teacher.specialties.split(',').map(s => s.trim());
+                }
+            }
+        }
+
         // Préparer la réponse formatée
         const formattedTeacher = {
             id: teacher.id,
+            userId: teacher.userId,
             firstName: teacher.first_name,
             lastName: teacher.last_name,
             matricule: teacher.matricule,
-            email: teacher.email,
+            email: teacher.email || teacher.user?.email,
             phone: teacher.phone,
-            specialties: teacher.specialties,
-            userId: teacher.userId,
+            specialties: specialties,
             createdBy: teacher.createdBy,
             createdAt: teacher.created_at,
             updatedAt: teacher.updated_at,
-            user: teacher.user,
-            assignedClasses: teacher.assignedClasses?.map(classItem => ({
-                id: classItem.id,
-                name: classItem.name,
-                level: classItem.level,
-                // Matières enseignées par ce prof dans cette classe
-                subjectsTaught: subjectsByClass[classItem.id] || [],
-                // Toutes les matières de la classe (pour référence)
-                allSubjects: allSubjectsByClass[classItem.id] || [],
-                studentCount: classItem.students?.length || 0,
-                principalTeacher: classItem.principalTeacher ? {
-                    id: classItem.principalTeacher.id,
-                    firstName: classItem.principalTeacher.firstName,
-                    lastName: classItem.principalTeacher.lastName,
-                    matricule: classItem.principalTeacher.matricule
-                } : null
-            })) || [],
+            user: {
+                id: teacher.user?.id,
+                email: teacher.user?.email,
+                isActive: teacher.user?.is_active,
+                createdAt: teacher.user?.created_at
+            },
+            assignedClasses: teacher.assignedClasses?.map(classItem => {
+                const classSubjects = subjectsByClass[classItem.id] || [];
+                const allClassSubjects = allSubjectsByClass[classItem.id] || [];
+                
+                return {
+                    id: classItem.id,
+                    name: classItem.name,
+                    level: classItem.level,
+                    subjectsTaught: classSubjects,
+                    allSubjects: allClassSubjects,
+                    studentCount: classItem.students?.length || 0,
+                    principalTeacher: classItem.principalTeacher ? {
+                        id: classItem.principalTeacher.id,
+                        firstName: classItem.principalTeacher.first_name,
+                        lastName: classItem.principalTeacher.last_name,
+                        matricule: classItem.principalTeacher.matricule
+                    } : null
+                };
+            }) || [],
             principalOfClasses: teacher.principalOfClasses?.map(cls => ({
                 id: cls.id,
                 name: cls.name,
                 level: cls.level
             })) || [],
-            // Toutes les matières enseignées par ce prof (toutes classes confondues)
-            teacherSubjects: Array.from(new Set(assignments.map(s => ({
-                id: s.id,
-                name: s.name,
-                code: s.code
-            }))))
+            teacherSubjects: Array.from(new Set(
+                assignments
+                    .filter(a => a.Subject)
+                    .map(a => ({
+                        id: a.Subject.id,
+                        name: a.Subject.name,
+                        code: a.Subject.code
+                    }))
+            ))
         };
 
         res.json({
@@ -404,7 +441,7 @@ const getTeacher = async (req, res) => {
     }
 };
 
-// @desc    Obtenir tous les enseignants
+// @desc    Obtenir tous les enseignants (version améliorée)
 // @route   GET /api/admin/teachers
 // @access  Privé (Admin)
 const getAllTeachers = async (req, res) => {
@@ -414,26 +451,62 @@ const getAllTeachers = async (req, res) => {
                 {
                     model: User,
                     as: 'user',
-                    attributes: ['email', 'isActive', 'created_at']
+                    attributes: ['id', 'email', 'is_active']
                 },
                 {
                     model: Class,
                     as: 'assignedClasses',
-                    through: { attributes: [] }
+                    through: { attributes: [] },
+                    attributes: ['id']
                 },
                 {
                     model: Class,
                     as: 'principalOfClasses',
-                    attributes: ['id', 'name', 'level']
+                    attributes: ['id']
                 }
             ],
-            order: [['lastName', 'ASC']]
+            order: [['last_name', 'ASC']]
+        });
+
+        // Normaliser les données pour le frontend
+        const normalizedTeachers = teachers.map(teacher => {
+            // Normaliser les spécialités
+            let specialties = [];
+            if (teacher.specialties) {
+                if (Array.isArray(teacher.specialties)) {
+                    specialties = teacher.specialties;
+                } else if (typeof teacher.specialties === 'string') {
+                    try {
+                        specialties = JSON.parse(teacher.specialties);
+                    } catch (e) {
+                        specialties = teacher.specialties.split(',').map(s => s.trim());
+                    }
+                }
+            }
+
+            return {
+                id: teacher.id,
+                userId: teacher.userId,
+                firstName: teacher.first_name,
+                lastName: teacher.last_name,
+                matricule: teacher.matricule,
+                email: teacher.email || teacher.user?.email,
+                phone: teacher.phone,
+                specialties: specialties,
+                user: {
+                    id: teacher.user?.id,
+                    email: teacher.user?.email,
+                    isActive: teacher.user?.is_active
+                },
+                assignedClasses: teacher.assignedClasses || [],
+                principalOfClasses: teacher.principalOfClasses || []
+            };
         });
 
         res.json({
             success: true,
             count: teachers.length,
-            data: teachers
+            data: normalizedTeachers
         });
     } catch (error) {
         console.error('Erreur récupération enseignants:', error);
@@ -444,8 +517,9 @@ const getAllTeachers = async (req, res) => {
     }
 };
 
-// @desc    Mettre à jour un enseignant
-// @route   PUT /api/admin/teachers/:id
+// @desc    Mettre à jour un enseignant (version améliorée)
+// @route   PUT /api/admin/teachers/:teacherId
+// @access  Privé (Admin)
 const updateTeacher = async (req, res) => {
     const transaction = await sequelize.transaction();
     
@@ -472,14 +546,28 @@ const updateTeacher = async (req, res) => {
         }
 
         // Mettre à jour les champs de base
-        if (firstName) teacher.firstName = firstName;
-        if (lastName) teacher.lastName = lastName;
+        if (firstName) teacher.first_name = firstName;
+        if (lastName) teacher.last_name = lastName;
         if (matricule) teacher.matricule = matricule;
         if (email !== undefined) teacher.email = email;
         if (phone !== undefined) teacher.phone = phone;
-        if (specialties !== undefined) teacher.specialties = specialties;
+        if (specialties !== undefined) {
+            // S'assurer que les spécialités sont stockées comme un tableau
+            teacher.specialties = Array.isArray(specialties) 
+                ? specialties 
+                : JSON.stringify(specialties);
+        }
 
         await teacher.save({ transaction });
+
+        // Mettre à jour l'email de l'utilisateur si nécessaire
+        if (email && teacher.userId) {
+            const user = await User.findByPk(teacher.userId, { transaction });
+            if (user && user.email !== email) {
+                user.email = email;
+                await user.save({ transaction });
+            }
+        }
 
         // Gérer les affectations (classes et matières)
         if (assignments !== undefined) {
@@ -492,17 +580,18 @@ const updateTeacher = async (req, res) => {
             // Créer les nouvelles affectations
             if (Array.isArray(assignments) && assignments.length > 0) {
                 for (const assignment of assignments) {
-                    // Vérifier que la matière correspond aux spécialités
-                    const subject = await Subject.findByPk(assignment.subjectId, { transaction });
-                    if (subject) {
-                        const teacherSpecs = Array.isArray(specialties) ? specialties : teacher.specialties;
+                    if (assignment.classId && assignment.subjectId) {
+                        // Vérifier que la classe et la matière existent
+                        const classExists = await Class.findByPk(assignment.classId, { transaction });
+                        const subjectExists = await Subject.findByPk(assignment.subjectId, { transaction });
                         
-                        // Créer l'affectation seulement si compatible avec les spécialités
-                        await TeacherClassSubject.create({
-                            teacherId: teacher.id,
-                            classId: assignment.classId,
-                            subjectId: assignment.subjectId
-                        }, { transaction });
+                        if (classExists && subjectExists) {
+                            await TeacherClassSubject.create({
+                                teacherId: teacher.id,
+                                classId: assignment.classId,
+                                subjectId: assignment.subjectId
+                            }, { transaction });
+                        }
                     }
                 }
             }
@@ -530,7 +619,7 @@ const updateTeacher = async (req, res) => {
                 {
                     model: User,
                     as: 'user',
-                    attributes: ['email', 'isActive']
+                    attributes: ['email', 'is_active']
                 },
                 {
                     model: Class,
@@ -545,10 +634,33 @@ const updateTeacher = async (req, res) => {
             ]
         });
 
+        // Normaliser les spécialités pour la réponse
+        let normalizedSpecialties = [];
+        if (updatedTeacher.specialties) {
+            if (Array.isArray(updatedTeacher.specialties)) {
+                normalizedSpecialties = updatedTeacher.specialties;
+            } else if (typeof updatedTeacher.specialties === 'string') {
+                try {
+                    normalizedSpecialties = JSON.parse(updatedTeacher.specialties);
+                } catch (e) {
+                    normalizedSpecialties = updatedTeacher.specialties.split(',').map(s => s.trim());
+                }
+            }
+        }
+
+        const responseData = {
+            ...updatedTeacher.toJSON(),
+            specialties: normalizedSpecialties,
+            user: {
+                ...updatedTeacher.user?.toJSON(),
+                isActive: updatedTeacher.user?.is_active
+            }
+        };
+
         res.json({
             success: true,
             message: 'Enseignant mis à jour avec succès',
-            data: updatedTeacher
+            data: responseData
         });
     } catch (error) {
         await transaction.rollback();
@@ -1848,31 +1960,61 @@ const deleteUser = async (req, res) => {
     }
 };
 
+
 // @desc    Mettre à jour le statut d'un utilisateur
 // @route   PATCH /api/admin/users/:userId/status
 // @access  Privé (Admin)
 const toggleUserStatus = async (req, res) => {
+    const transaction = await sequelize.transaction();
+    
     try {
         const { userId } = req.params;
         const { isActive } = req.body;
 
-        const user = await User.findByPk(userId);
+        console.log('Toggle status - userId:', userId, 'isActive:', isActive);
+
+        // Chercher directement l'utilisateur par son ID
+        const user = await User.findByPk(userId, { transaction });
+
         if (!user) {
+            await transaction.rollback();
             return res.status(404).json({
                 success: false,
                 message: 'Utilisateur non trouvé'
             });
         }
 
+        // Mettre à jour le statut
         user.isActive = isActive;
-        await user.save();
+        await user.save({ transaction });
+
+        // Si c'est un enseignant, on peut aussi mettre à jour le profil teacher si nécessaire
+        if (user.role === 'teacher') {
+            const teacher = await Teacher.findOne({ 
+                where: { userId: user.id },
+                transaction 
+            });
+            
+            if (teacher) {
+                // Vous pouvez ajouter des mises à jour spécifiques à l'enseignant ici
+                console.log(`Statut mis à jour pour l'enseignant: ${teacher.id}`);
+            }
+        }
+
+        await transaction.commit();
+
+        console.log('Statut mis à jour avec succès');
 
         res.json({
             success: true,
             message: `Utilisateur ${isActive ? 'activé' : 'désactivé'} avec succès`,
-            data: { isActive: user.isActive }
+            data: { 
+                isActive: user.isActive,
+                userId: user.id
+            }
         });
     } catch (error) {
+        await transaction.rollback();
         console.error('Erreur toggle status:', error);
         res.status(500).json({
             success: false,
@@ -1880,6 +2022,7 @@ const toggleUserStatus = async (req, res) => {
         });
     }
 };
+
 
 
 module.exports = {

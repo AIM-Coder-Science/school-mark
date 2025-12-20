@@ -21,6 +21,9 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  LinearProgress,
+  Tooltip,
+  Stack,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -32,6 +35,14 @@ import {
   Badge as BadgeIcon,
   Book as BookIcon,
   Groups as GroupsIcon,
+  CalendarToday as CalendarIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+  Assignment as AssignmentIcon,
+  TrendingUp as TrendingUpIcon,
+  Class as ClassIcon,
+  Subject as SubjectIcon,
+  People as PeopleIcon,
 } from '@mui/icons-material';
 import { Helmet } from 'react-helmet-async';
 import { useNavigate, useParams } from 'react-router-dom';
@@ -44,6 +55,12 @@ const TeacherDetail = () => {
   const { teacherId } = useParams();
   const [teacherData, setTeacherData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [stats, setStats] = useState({
+    totalClasses: 0,
+    totalSubjects: 0,
+    principalClasses: 0,
+    totalStudents: 0,
+  });
 
   useEffect(() => {
     fetchTeacherData();
@@ -53,8 +70,42 @@ const TeacherDetail = () => {
     try {
       setLoading(true);
       const response = await adminAPI.getTeacher(teacherId);
-      console.log('Données enseignant reçues:', response.data.data);
-      setTeacherData(response.data.data);
+      const teacher = response.data.data;
+      console.log('Données enseignant reçues:', teacher);
+      
+      // Normaliser les données
+      const normalizedTeacher = {
+        ...teacher,
+        firstName: teacher.firstName || teacher.first_name || '',
+        lastName: teacher.lastName || teacher.last_name || '',
+        email: teacher.email || '',
+        phone: teacher.phone || '',
+        matricule: teacher.matricule || '',
+        specialties: Array.isArray(teacher.specialties) 
+          ? teacher.specialties 
+          : (typeof teacher.specialties === 'string' ? teacher.specialties.split(',').map(s => s.trim()) : []),
+        user: {
+          ...teacher.user,
+          isActive: teacher.user?.isActive /*?? teacher.user?.is_active ?? false*/,
+        }
+      };
+
+      setTeacherData(normalizedTeacher);
+
+      // Calculer les statistiques
+      const assignedClasses = normalizedTeacher.assignedClasses || [];
+      const principalClasses = normalizedTeacher.principalOfClasses || [];
+      const teacherSubjects = normalizedTeacher.teacherSubjects || [];
+
+      const totalStudents = assignedClasses.reduce((sum, cls) => sum + (cls.studentCount || 0), 0);
+
+      setStats({
+        totalClasses: assignedClasses.length,
+        totalSubjects: teacherSubjects.length,
+        principalClasses: principalClasses.length,
+        totalStudents,
+      });
+
     } catch (error) {
       console.error('Erreur chargement enseignant:', error);
       toast.error('Erreur lors du chargement de l\'enseignant');
@@ -62,6 +113,16 @@ const TeacherDetail = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const formatDate = (dateString) => {
+    if (!dateString) return 'Non défini';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('fr-FR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric'
+    });
   };
 
   if (loading) {
@@ -72,132 +133,165 @@ const TeacherDetail = () => {
     return null;
   }
 
-  // Préparation du titre sécurisé pour Helmet
-  const pageTitle = `${teacherData.firstName || ''} ${teacherData.lastName || ''} - Détails`;
+  const { firstName, lastName, matricule, email, phone, specialties, user, assignedClasses } = teacherData;
+  const isActive = user?.isActive /*|| false*/;
+  const pageTitle = `${firstName} ${lastName} - Détails`;
 
   return (
     <>
       <Helmet>
-        {/* Correction Helmet : Utilisation d'une string unique entre accolades */}
         <title>{pageTitle}</title>
       </Helmet>
 
       <Box sx={{ mb: 4 }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 3 }}>
-          <IconButton onClick={() => navigate('/admin/teachers')}>
-            <ArrowBackIcon />
-          </IconButton>
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h4" sx={{ fontWeight: 700, color: 'primary.main' }}>
-              {teacherData.firstName} {teacherData.lastName}
-            </Typography>
-            <Typography variant="body1" color="textSecondary">
-              Matricule: {teacherData.matricule}
-            </Typography>
-          </Box>
-          <Button
-            variant="contained"
-            startIcon={<EditIcon />}
-            onClick={() => navigate(`/admin/teachers/edit/${teacherId}`)}
-            sx={{
-              background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
-              '&:hover': {
-                background: 'linear-gradient(45deg, #1565c0, #1976d2)',
-              },
-            }}
-          >
-            Modifier
-          </Button>
-        </Box>
+        {/* En-tête avec navigation et actions */}
+        <Card sx={{ 
+          mb: 3, 
+          borderRadius: 2,
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          color: 'white',
+          boxShadow: 3
+        }}>
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 3, mb: 2 }}>
+              <Tooltip title="Retour à la liste">
+                <IconButton 
+                  onClick={() => navigate('/admin/teachers')} 
+                  sx={{ 
+                    color: 'white',
+                    bgcolor: 'rgba(255,255,255,0.2)',
+                    '&:hover': { bgcolor: 'rgba(255,255,255,0.3)' }
+                  }}
+                >
+                  <ArrowBackIcon />
+                </IconButton>
+              </Tooltip>
+              
+              <Avatar
+                sx={{ 
+                  bgcolor: 'white', 
+                  width: 80, 
+                  height: 80,
+                  fontSize: '2rem',
+                  color: 'primary.main',
+                  fontWeight: 700,
+                  border: '4px solid white',
+                  boxShadow: 2
+                }}
+              >
+                {firstName[0]}{lastName[0]}
+              </Avatar>
+              
+              <Box sx={{ flexGrow: 1 }}>
+                <Typography variant="h3" sx={{ fontWeight: 800, mb: 0.5 }}>
+                  {firstName} {lastName}
+                </Typography>
+                <Typography variant="body1" sx={{ opacity: 0.9, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <BadgeIcon fontSize="small" />
+                  {matricule}
+                </Typography>
+              </Box>
+              
+              <Chip
+                icon={isActive ? <CheckCircleIcon /> : <CancelIcon />}
+                label={isActive ? 'ACTIF' : 'INACTIF'}
+                color={isActive ? "success" : "error"}
+                sx={{ 
+                  height: 40,
+                  fontWeight: 700,
+                  fontSize: '0.875rem',
+                  '& .MuiChip-icon': { color: 'inherit' }
+                }}
+              />
+            </Box>
+
+            <Divider sx={{ my: 2, bgcolor: 'rgba(255,255,255,0.2)' }} />
+
+            <Stack direction="row" spacing={3} sx={{ flexWrap: 'wrap' }}>
+              {email && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <EmailIcon fontSize="small" />
+                  <Typography variant="body2">{email}</Typography>
+                </Box>
+              )}
+              
+              {phone && (
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <PhoneIcon fontSize="small" />
+                  <Typography variant="body2">{phone}</Typography>
+                </Box>
+              )}
+              
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <CalendarIcon fontSize="small" />
+                <Typography variant="body2">
+                  Créé le {formatDate(teacherData.createdAt)}
+                </Typography>
+              </Box>
+            </Stack>
+          </CardContent>
+        </Card>
 
         <Grid container spacing={3}>
-          {/* Informations personnelles */}
+          {/* Carte d'information */}
           <Grid item xs={12} md={4}>
-            <Card>
+            <Card sx={{ height: '100%', borderRadius: 2, boxShadow: 1 }}>
               <CardContent>
-                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', mb: 3 }}>
-                  <Avatar
-                    sx={{ 
-                      bgcolor: 'primary.main', 
-                      width: 100, 
-                      height: 100,
-                      fontSize: '2.5rem',
-                      mb: 2
-                    }}
-                  >
-                    {/* Sécurité sur les initiales */}
-                    {(teacherData.firstName?.[0] || '') + (teacherData.lastName?.[0] || '')}
-                  </Avatar>
-                  <Typography variant="h6" sx={{ fontWeight: 600, textAlign: 'center' }}>
-                    {teacherData.firstName} {teacherData.lastName}
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    {teacherData.matricule}
-                  </Typography>
-                  <Chip
-                    label={teacherData.user?.isActive ? 'Actif' : 'Inactif'}
-                    color={teacherData.user?.isActive ? 'success' : 'error'}
-                    size="small"
-                    sx={{ mt: 1 }}
-                  />
-                </Box>
-
-                <Divider sx={{ my: 2 }} />
+                <Typography variant="h6" sx={{ mb: 3, fontWeight: 700, color: 'primary.main', display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <PersonIcon /> Informations personnelles
+                </Typography>
 
                 <List dense>
-                  {teacherData.email && (
+                  <ListItem>
+                    <ListItemIcon>
+                      <BadgeIcon color="primary" />
+                    </ListItemIcon>
+                    <ListItemText
+                      primary="Matricule"
+                      secondary={<Typography variant="body2" sx={{ fontWeight: 600 }}>{matricule}</Typography>}
+                    />
+                  </ListItem>
+                  
+                  {email && (
                     <ListItem>
                       <ListItemIcon>
-                        <EmailIcon color="action" />
+                        <EmailIcon color="primary" />
                       </ListItemIcon>
                       <ListItemText
                         primary="Email"
-                        secondary={teacherData.email}
+                        secondary={email}
                       />
                     </ListItem>
                   )}
                   
-                  {teacherData.phone && (
+                  {phone && (
                     <ListItem>
                       <ListItemIcon>
-                        <PhoneIcon color="action" />
+                        <PhoneIcon color="primary" />
                       </ListItemIcon>
                       <ListItemText
                         primary="Téléphone"
-                        secondary={teacherData.phone}
+                        secondary={phone}
                       />
                     </ListItem>
                   )}
-
-                  <ListItem>
-                    <ListItemIcon>
-                      <BadgeIcon color="action" />
-                    </ListItemIcon>
-                    <ListItemText
-                      primary="Matricule"
-                      secondary={teacherData.matricule}
-                    />
-                  </ListItem>
                 </List>
 
-                <Divider sx={{ my: 2 }} />
+                <Divider sx={{ my: 3 }} />
 
-                {teacherData.specialties && (
+                {specialties && specialties.length > 0 && (
                   <Box>
-                    <Typography variant="body2" color="textSecondary" gutterBottom>
-                      Spécialités:
+                    <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600, color: 'text.primary', display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <BookIcon fontSize="small" /> Spécialités
                     </Typography>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                      {(Array.isArray(teacherData.specialties) 
-                        ? teacherData.specialties 
-                        : teacherData.specialties.split(',')
-                      ).map((spec, index) => (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                      {specialties.map((spec, index) => (
                         <Chip
                           key={index}
-                          label={spec.trim()}
-                          size="small"
+                          label={spec}
+                          size="medium"
                           color="primary"
-                          variant="outlined"
+                          sx={{ fontWeight: 500 }}
                         />
                       ))}
                     </Box>
@@ -207,151 +301,269 @@ const TeacherDetail = () => {
             </Card>
           </Grid>
 
-          {/* Classes principales */}
-          <Grid item xs={12} md={4}>
-            <Card sx={{ height: '100%' }}>
-              <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                  <SchoolIcon color="primary" />
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    Classes principales
-                  </Typography>
-                </Box>
-                
-                <Divider sx={{ my: 2 }} />
-
-                {teacherData.principalOfClasses && teacherData.principalOfClasses.length > 0 ? (
-                  <List dense>
-                    {teacherData.principalOfClasses.map((classItem) => (
-                      <ListItem key={classItem.id}>
-                        <ListItemIcon>
-                          <SchoolIcon color="primary" fontSize="small" />
-                        </ListItemIcon>
-                        <ListItemText
-                          primary={classItem.name}
-                          secondary={`Niveau: ${classItem.level}`}
-                        />
-                      </ListItem>
-                    ))}
-                  </List>
-                ) : (
-                  <Typography variant="body2" color="textSecondary">
-                    Aucune classe principale assignée
-                  </Typography>
-                )}
-              </CardContent>
-            </Card>
-          </Grid>
-
           {/* Statistiques */}
-          <Grid item xs={12} md={4}>
-            <Card sx={{ height: '100%' }}>
+          <Grid item xs={12} md={8}>
+            <Card sx={{ height: '100%', borderRadius: 2, boxShadow: 1 }}>
               <CardContent>
-                <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-                  Statistiques
+                <Typography variant="h6" sx={{ mb: 3, fontWeight: 700, color: 'primary.main', display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <TrendingUpIcon /> Statistiques
                 </Typography>
                 
-                <Divider sx={{ my: 2 }} />
-
-                <Grid container spacing={2}>
-                  <Grid item xs={6}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h3" color="primary" sx={{ fontWeight: 700 }}>
-                        {teacherData.assignedClasses?.length || 0}
+                <Grid container spacing={3}>
+                  <Grid item xs={6} sm={3}>
+                    <Card sx={{ 
+                      textAlign: 'center', 
+                      p: 2, 
+                      bgcolor: 'primary.light', 
+                      borderRadius: 2,
+                      boxShadow: 2
+                    }}>
+                      <Typography variant="h2" color="primary.dark" sx={{ fontWeight: 800 }}>
+                        {stats.totalClasses}
                       </Typography>
-                      <Typography variant="body2" color="textSecondary">
-                        Classes
+                      <Typography variant="body2" color="primary.dark" sx={{ mt: 1, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                        <ClassIcon fontSize="small" /> Classes
                       </Typography>
-                    </Box>
+                    </Card>
                   </Grid>
                   
-                  <Grid item xs={6}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h3" color="primary" sx={{ fontWeight: 700 }}>
-                        {teacherData.teacherSubjects?.length || 0}
+                  <Grid item xs={6} sm={3}>
+                    <Card sx={{ 
+                      textAlign: 'center', 
+                      p: 2, 
+                      bgcolor: 'success.light', 
+                      borderRadius: 2,
+                      boxShadow: 2
+                    }}>
+                      <Typography variant="h2" color="success.dark" sx={{ fontWeight: 800 }}>
+                        {stats.totalSubjects}
                       </Typography>
-                      <Typography variant="body2" color="textSecondary">
-                        Matières
+                      <Typography variant="body2" color="success.dark" sx={{ mt: 1, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                        <SubjectIcon fontSize="small" /> Matières
                       </Typography>
-                    </Box>
+                    </Card>
                   </Grid>
                   
-                  <Grid item xs={6}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h3" color="primary" sx={{ fontWeight: 700 }}>
-                        {teacherData.principalOfClasses?.length || 0}
+                  <Grid item xs={6} sm={3}>
+                    <Card sx={{ 
+                      textAlign: 'center', 
+                      p: 2, 
+                      bgcolor: 'warning.light', 
+                      borderRadius: 2,
+                      boxShadow: 2
+                    }}>
+                      <Typography variant="h2" color="warning.dark" sx={{ fontWeight: 800 }}>
+                        {stats.principalClasses}
                       </Typography>
-                      <Typography variant="body2" color="textSecondary">
-                        Principales
+                      <Typography variant="body2" color="warning.dark" sx={{ mt: 1, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                        <SchoolIcon fontSize="small" /> Classes principales
                       </Typography>
-                    </Box>
+                    </Card>
+                  </Grid>
+                  
+                  <Grid item xs={6} sm={3}>
+                    <Card sx={{ 
+                      textAlign: 'center', 
+                      p: 2, 
+                      bgcolor: 'info.light', 
+                      borderRadius: 2,
+                      boxShadow: 2
+                    }}>
+                      <Typography variant="h2" color="info.dark" sx={{ fontWeight: 800 }}>
+                        {stats.totalStudents}
+                      </Typography>
+                      <Typography variant="body2" color="info.dark" sx={{ mt: 1, fontWeight: 600, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                        <PeopleIcon fontSize="small" /> Élèves
+                      </Typography>
+                    </Card>
                   </Grid>
                 </Grid>
+                
+                <Divider sx={{ my: 3 }} />
+                
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                    Dernière mise à jour : {formatDate(teacherData.updatedAt)}
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    startIcon={<EditIcon />}
+                    onClick={() => navigate(`/admin/teachers/edit/${teacherId}`)}
+                    sx={{
+                      background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
+                      '&:hover': {
+                        background: 'linear-gradient(45deg, #1565c0, #1976d2)',
+                      },
+                      fontWeight: 600,
+                      px: 3
+                    }}
+                  >
+                    Modifier
+                  </Button>
+                </Box>
               </CardContent>
             </Card>
           </Grid>
+
+          {/* Classes principales */}
+          {teacherData.principalOfClasses && teacherData.principalOfClasses.length > 0 && (
+            <Grid item xs={12}>
+              <Card sx={{ borderRadius: 2, boxShadow: 1 }}>
+                <CardContent>
+                  <Typography variant="h6" sx={{ mb: 3, fontWeight: 700, color: 'primary.main', display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <SchoolIcon /> Classes principales
+                  </Typography>
+                  
+                  <Grid container spacing={2}>
+                    {teacherData.principalOfClasses.map((classItem) => (
+                      <Grid item xs={12} sm={6} md={4} key={classItem.id}>
+                        <Card variant="outlined" sx={{ height: '100%', borderRadius: 2 }}>
+                          <CardContent>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
+                              <Avatar sx={{ bgcolor: 'primary.main', width: 40, height: 40 }}>
+                                <ClassIcon />
+                              </Avatar>
+                              <Box>
+                                <Typography variant="h6" sx={{ fontWeight: 700 }}>
+                                  {classItem.name}
+                                </Typography>
+                                <Typography variant="body2" color="textSecondary">
+                                  Niveau: {classItem.level}
+                                </Typography>
+                              </Box>
+                            </Box>
+                            <Chip 
+                              label="Professeur principal" 
+                              color="success" 
+                              size="small"
+                              sx={{ fontWeight: 600 }}
+                            />
+                          </CardContent>
+                        </Card>
+                      </Grid>
+                    ))}
+                  </Grid>
+                </CardContent>
+              </Card>
+            </Grid>
+          )}
 
           {/* Affectations par classe */}
           <Grid item xs={12}>
-            <Card>
+            <Card sx={{ borderRadius: 2, boxShadow: 1 }}>
               <CardContent>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
-                  <BookIcon color="primary" />
-                  <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    Affectations par classe
-                  </Typography>
-                </Box>
+                <Typography variant="h6" sx={{ mb: 3, fontWeight: 700, color: 'primary.main', display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <AssignmentIcon /> Affectations détaillées
+                </Typography>
                 
-                <Divider sx={{ my: 2 }} />
-
-                {teacherData.assignedClasses && teacherData.assignedClasses.length > 0 ? (
+                {assignedClasses && assignedClasses.length > 0 ? (
                   <TableContainer>
                     <Table>
-                      <TableHead>
+                      <TableHead sx={{ bgcolor: 'grey.50' }}>
                         <TableRow>
-                          <TableCell><strong>Classe</strong></TableCell>
-                          <TableCell><strong>Niveau</strong></TableCell>
-                          <TableCell><strong>Matières</strong></TableCell>
-                          <TableCell><strong>Effectif</strong></TableCell>
-                          <TableCell><strong>Titulaire</strong></TableCell>
+                          <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Classe</TableCell>
+                          <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Niveau</TableCell>
+                          <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Matières enseignées</TableCell>
+                          <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Effectif</TableCell>
+                          <TableCell sx={{ fontWeight: 700, fontSize: '0.875rem' }}>Professeur principal</TableCell>
                         </TableRow>
                       </TableHead>
                       <TableBody>
-                        {teacherData.assignedClasses.map((classItem) => {
-                          const isPrincipal = classItem.principalTeacher?.id === parseInt(teacherId);
+                        {assignedClasses.map((classItem) => {
+                          const isPrincipal = teacherData.principalOfClasses?.some(cls => cls.id === classItem.id);
+                          const subjectsTaught = classItem.subjectsTaught || [];
 
                           return (
-                            <TableRow key={classItem.id}>
+                            <TableRow 
+                              key={classItem.id}
+                              sx={{ 
+                                '&:hover': { bgcolor: 'action.hover' },
+                                '&:last-child td, &:last-child th': { border: 0 }
+                              }}
+                            >
                               <TableCell>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                                    {classItem.name}
-                                  </Typography>
-                                  {isPrincipal && (
-                                    <Chip label="Titulaire" size="small" color="success" variant="outlined" />
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                  <Avatar sx={{ 
+                                    bgcolor: isPrincipal ? 'success.main' : 'primary.main', 
+                                    width: 32, 
+                                    height: 32,
+                                    fontSize: '0.875rem'
+                                  }}>
+                                    <ClassIcon fontSize="small" />
+                                  </Avatar>
+                                  <Box>
+                                    <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                                      {classItem.name}
+                                    </Typography>
+                                    {isPrincipal && (
+                                      <Chip 
+                                        label="Titulaire" 
+                                        size="small" 
+                                        color="success" 
+                                        sx={{ mt: 0.5, fontWeight: 500 }}
+                                      />
+                                    )}
+                                  </Box>
+                                </Box>
+                              </TableCell>
+                              <TableCell>
+                                <Chip 
+                                  label={classItem.level} 
+                                  size="small" 
+                                  color="primary" 
+                                  variant="outlined"
+                                  sx={{ fontWeight: 500 }}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                                  {subjectsTaught.length > 0 ? (
+                                    subjectsTaught.map((subject) => (
+                                      <Tooltip key={subject.id} title={subject.name}>
+                                        <Chip 
+                                          label={subject.name} 
+                                          size="small" 
+                                          color="secondary"
+                                          sx={{ fontWeight: 500 }}
+                                        />
+                                      </Tooltip>
+                                    ))
+                                  ) : (
+                                    <Typography variant="caption" color="textSecondary">
+                                      Aucune matière assignée
+                                    </Typography>
                                   )}
                                 </Box>
                               </TableCell>
-                              <TableCell>{classItem.level}</TableCell>
                               <TableCell>
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
-                                  {classItem.subjectsTaught?.map((subject) => (
-                                    <Chip key={subject.id} label={subject.name} size="small" variant="outlined" />
-                                  ))}
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <PeopleIcon fontSize="small" color="action" />
+                                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                    {classItem.studentCount || 0} élèves
+                                  </Typography>
                                 </Box>
                               </TableCell>
-                              <TableCell>{classItem.studentCount || 0} élèves</TableCell>
                               <TableCell>
                                 {classItem.principalTeacher ? (
                                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                                    <Avatar sx={{ width: 24, height: 24, fontSize: '0.7rem' }}>
-                                      {(classItem.principalTeacher.firstName?.[0] || '') + (classItem.principalTeacher.lastName?.[0] || '')}
+                                    <Avatar sx={{ 
+                                      width: 28, 
+                                      height: 28, 
+                                      fontSize: '0.75rem',
+                                      bgcolor: classItem.principalTeacher.id === parseInt(teacherId) ? 'success.main' : 'primary.main'
+                                    }}>
+                                      {(classItem.principalTeacher.firstName?.[0] || classItem.principalTeacher.first_name?.[0] || '') + 
+                                       (classItem.principalTeacher.lastName?.[0] || classItem.principalTeacher.last_name?.[0] || '')}
                                     </Avatar>
-                                    <Typography variant="body2">
-                                      {classItem.principalTeacher.firstName} {classItem.principalTeacher.lastName}
+                                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                      {classItem.principalTeacher.firstName || classItem.principalTeacher.first_name} {classItem.principalTeacher.lastName || classItem.principalTeacher.last_name}
                                     </Typography>
                                   </Box>
-                                ) : 'Non défini'}
+                                ) : (
+                                  <Typography variant="caption" color="textSecondary">
+                                    Non défini
+                                  </Typography>
+                                )}
                               </TableCell>
                             </TableRow>
                           );
@@ -360,9 +572,22 @@ const TeacherDetail = () => {
                     </Table>
                   </TableContainer>
                 ) : (
-                  <Typography sx={{ py: 3, textAlign: 'center' }} color="textSecondary">
-                    Aucune affectation trouvée
-                  </Typography>
+                  <Box sx={{ textAlign: 'center', py: 6 }}>
+                    <BookIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+                    <Typography variant="h6" color="textSecondary" gutterBottom>
+                      Aucune affectation de classe
+                    </Typography>
+                    <Typography variant="body2" color="textSecondary" sx={{ mb: 3 }}>
+                      Cet enseignant n'est pas encore affecté à des classes
+                    </Typography>
+                    <Button
+                      variant="contained"
+                      startIcon={<EditIcon />}
+                      onClick={() => navigate(`/admin/teachers/edit/${teacherId}`)}
+                    >
+                      Ajouter des affectations
+                    </Button>
+                  </Box>
                 )}
               </CardContent>
             </Card>

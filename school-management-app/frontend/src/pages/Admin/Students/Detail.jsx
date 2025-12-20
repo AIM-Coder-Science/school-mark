@@ -47,6 +47,7 @@ const StudentDetail = () => {
     try {
       setLoading(true);
       const response = await adminAPI.getStudent(studentId);
+      console.log('Données étudiant:', response.data.data);
       setStudentData(response.data.data);
     } catch (error) {
       console.error('Erreur chargement étudiant:', error);
@@ -64,6 +65,8 @@ const StudentDetail = () => {
   if (!studentData) {
     return null;
   }
+
+  const isActive = studentData.user?.isActive ?? studentData.user?.is_active ?? false;
 
   return (
     <>
@@ -114,7 +117,7 @@ const StudentDetail = () => {
                       mb: 2
                     }}
                   >
-                    {studentData.firstName[0]}{studentData.lastName[0]}
+                    {studentData.firstName?.[0]}{studentData.lastName?.[0]}
                   </Avatar>
                   <Typography variant="h6" sx={{ fontWeight: 600, textAlign: 'center' }}>
                     {studentData.firstName} {studentData.lastName}
@@ -123,8 +126,8 @@ const StudentDetail = () => {
                     {studentData.matricule}
                   </Typography>
                   <Chip
-                    label={studentData.user?.isActive ? 'Actif' : 'Inactif'}
-                    color={studentData.user?.isActive ? 'success' : 'error'}
+                    label={isActive ? 'Actif' : 'Inactif'}
+                    color={isActive ? 'success' : 'error'}
                     size="small"
                     sx={{ mt: 1 }}
                   />
@@ -296,47 +299,51 @@ const StudentDetail = () => {
 
                 <Grid container spacing={3}>
                   <Grid item xs={12} sm={6} md={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h3" color="primary" sx={{ fontWeight: 700 }}>
+                    <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'primary.light', borderRadius: 2 }}>
+                      <Typography variant="h3" color="primary.dark" sx={{ fontWeight: 700 }}>
                         0
                       </Typography>
-                      <Typography variant="body2" color="textSecondary">
+                      <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
                         Notes enregistrées
                       </Typography>
                     </Box>
                   </Grid>
                   
                   <Grid item xs={12} sm={6} md={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h3" color="primary" sx={{ fontWeight: 700 }}>
+                    <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'success.light', borderRadius: 2 }}>
+                      <Typography variant="h3" color="success.dark" sx={{ fontWeight: 700 }}>
                         -
                       </Typography>
-                      <Typography variant="body2" color="textSecondary">
+                      <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
                         Moyenne générale
                       </Typography>
                     </Box>
                   </Grid>
                   
                   <Grid item xs={12} sm={6} md={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h3" color="primary" sx={{ fontWeight: 700 }}>
+                    <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'info.light', borderRadius: 2 }}>
+                      <Typography variant="h3" color="info.dark" sx={{ fontWeight: 700 }}>
                         0
                       </Typography>
-                      <Typography variant="body2" color="textSecondary">
+                      <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
                         Bulletins générés
                       </Typography>
                     </Box>
                   </Grid>
                   
                   <Grid item xs={12} sm={6} md={3}>
-                    <Box sx={{ textAlign: 'center' }}>
-                      <Typography variant="h3" color="primary" sx={{ fontWeight: 700 }}>
+                    <Box sx={{ textAlign: 'center', p: 2, bgcolor: 'warning.light', borderRadius: 2 }}>
+                      <Typography variant="body1" color="warning.dark" sx={{ fontWeight: 700 }}>
                         {studentData.user?.created_at ? 
-                          new Date(studentData.user.created_at).toLocaleDateString('fr-FR') : 
+                          new Date(studentData.user.created_at).toLocaleDateString('fr-FR', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric'
+                          }) : 
                           'N/A'
                         }
                       </Typography>
-                      <Typography variant="body2" color="textSecondary">
+                      <Typography variant="body2" color="textSecondary" sx={{ mt: 1 }}>
                         Date d'inscription
                       </Typography>
                     </Box>

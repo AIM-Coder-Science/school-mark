@@ -20,17 +20,16 @@ import {
   CardContent,
   Grid,
   useMediaQuery,
-  IconButton,
+  Switch,
+  Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Search as SearchIcon,
-  FilterList as FilterIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
   Visibility as VisibilityIcon,
   School as SchoolIcon,
-  Email as EmailIcon,
   Phone as PhoneIcon,
 } from '@mui/icons-material';
 import { Helmet } from 'react-helmet-async';
@@ -61,14 +60,10 @@ const StudentsList = () => {
     try {
       setLoading(true);
       
-      // Appeler getAllStudents au lieu de getStudents
       const [studentsRes, classesRes] = await Promise.all([
         adminAPI.getAllStudents(),
         adminAPI.getAllClasses(),
       ]);
-      
-      console.log('Étudiants chargés:', studentsRes.data);
-      console.log('Classes chargées:', classesRes.data);
       
       setStudents(studentsRes.data.data || []);
       setClasses(classesRes.data.data || []);
@@ -77,6 +72,31 @@ const StudentsList = () => {
       toast.error('Erreur lors du chargement des données');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleStatus = async (student) => {
+    const currentStatus = student.user?.isActive ?? student.user?.is_active ?? false;
+    const newStatus = !currentStatus;
+    
+    try {
+      // Utiliser student.userId ou student.user.id (l'ID de l'utilisateur, pas du student)
+      const userIdToUse = student.userId || student.user?.id;
+      
+      if (!userIdToUse) {
+        toast.error('ID utilisateur introuvable');
+        return;
+      }
+      
+      await adminAPI.toggleUserStatus(userIdToUse, { 
+        isActive: newStatus 
+      });
+      
+      toast.success(`Apprenant ${newStatus ? 'activé' : 'désactivé'}`);
+      fetchData();
+    } catch (error) {
+      console.error('Erreur toggle:', error);
+      toast.error('Erreur lors du changement de statut');
     }
   };
 
@@ -106,21 +126,19 @@ const StudentsList = () => {
   };
 
   const filteredStudents = students.filter(student => {
-    // Filtre par recherche
     const searchMatch = !search || 
       student.firstName?.toLowerCase().includes(search.toLowerCase()) ||
       student.lastName?.toLowerCase().includes(search.toLowerCase()) ||
       student.matricule?.toLowerCase().includes(search.toLowerCase());
 
-    // Filtre par classe
     const classMatch = selectedClass === 'all' || 
       student.classId?.toString() === selectedClass ||
       student.class?.id?.toString() === selectedClass;
 
-    // Filtre par statut
+    const isActive = student.user?.isActive ?? student.user?.is_active ?? false;
     const statusMatch = selectedStatus === 'all' || 
-      (selectedStatus === 'active' && student.user?.isActive) ||
-      (selectedStatus === 'inactive' && !student.user?.isActive);
+      (selectedStatus === 'active' && isActive) ||
+      (selectedStatus === 'inactive' && !isActive);
 
     return searchMatch && classMatch && statusMatch;
   });
@@ -141,10 +159,7 @@ const StudentsList = () => {
       width: 250,
       render: (value, row) => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <Avatar
-            src={row.photo}
-            sx={{ bgcolor: 'secondary.main' }}
-          >
+          <Avatar src={row.photo} sx={{ bgcolor: 'secondary.main' }}>
             {row.firstName?.[0]}{row.lastName?.[0]}
           </Avatar>
           <Box>
@@ -161,7 +176,7 @@ const StudentsList = () => {
     {
       field: 'class',
       headerName: 'Classe',
-      width: 150,
+      width: 180,
       render: (value, row) => (
         <Chip
           label={getClassName(row)}
@@ -174,12 +189,12 @@ const StudentsList = () => {
     },
     {
       field: 'contact',
-      headerName: 'Contact',
-      width: 250,
+      headerName: 'Contact Parent',
+      width: 220,
       render: (value, row) => (
         <Box>
           {row.parentName && (
-            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
+            <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }} noWrap>
               {row.parentName}
             </Typography>
           )}
@@ -196,9 +211,8 @@ const StudentsList = () => {
       field: 'birthDate',
       headerName: 'Date de naissance',
       width: 150,
-      type: 'date',
       render: (value) => (
-        <Typography>
+        <Typography variant="body2">
           {value ? new Date(value).toLocaleDateString('fr-FR') : '-'}
         </Typography>
       ),
@@ -207,14 +221,24 @@ const StudentsList = () => {
       field: 'status',
       headerName: 'Statut',
       width: 120,
-      render: (value, row) => (
-        <Chip
-          label={row.user?.isActive ? 'Actif' : 'Inactif'}
-          color={row.user?.isActive ? 'success' : 'error'}
-          size="small"
-          variant="outlined"
-        />
-      ),
+      render: (value, row) => {
+        const isActive = row.user?.isActive ?? row.user?.is_active ?? false;
+        return (
+          <Tooltip title={isActive ? "Cliquer pour désactiver" : "Cliquer pour activer"}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Switch
+                checked={isActive}
+                onChange={() => handleToggleStatus(row)}
+                color="success"
+                size="small"
+              />
+              <Typography variant="caption" color={isActive ? "success.main" : "error.main"}>
+                {isActive ? 'Actif' : 'Inactif'}
+              </Typography>
+            </Box>
+          </Tooltip>
+        );
+      },
     },
   ];
 
@@ -242,7 +266,7 @@ const StudentsList = () => {
               Gestion des Apprenants
             </Typography>
             <Typography variant="body1" color="textSecondary">
-              {students.length} apprenant(s) enregistré(s)
+              {students.length} apprenant(s) • {students.filter(s => s.user?.isActive || s.user?.is_active).length} actif(s)
             </Typography>
           </Box>
           
@@ -250,6 +274,7 @@ const StudentsList = () => {
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => navigate('/admin/students/new')}
+            size="large"
             sx={{ 
               background: 'linear-gradient(45deg, #1976d2, #42a5f5)',
               '&:hover': {
@@ -263,10 +288,10 @@ const StudentsList = () => {
 
         <Paper sx={{ p: 3, mb: 3, borderRadius: 2 }}>
           <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} md={4}>
+            <Grid item xs={12} md={5}>
               <TextField
                 fullWidth
-                placeholder="Rechercher un apprenant..."
+                placeholder="Rechercher par nom ou matricule..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 InputProps={{
@@ -282,10 +307,10 @@ const StudentsList = () => {
             
             <Grid item xs={12} md={3}>
               <FormControl fullWidth size="small">
-                <InputLabel>Filtrer par classe</InputLabel>
+                <InputLabel>Classe</InputLabel>
                 <Select
                   value={selectedClass}
-                  label="Filtrer par classe"
+                  label="Classe"
                   onChange={(e) => setSelectedClass(e.target.value)}
                 >
                   <MenuItem value="all">Toutes les classes</MenuItem>
@@ -298,31 +323,30 @@ const StudentsList = () => {
               </FormControl>
             </Grid>
             
-            <Grid item xs={12} md={3}>
+            <Grid item xs={12} md={2}>
               <FormControl fullWidth size="small">
-                <InputLabel>Filtrer par statut</InputLabel>
+                <InputLabel>Statut</InputLabel>
                 <Select
                   value={selectedStatus}
-                  label="Filtrer par statut"
+                  label="Statut"
                   onChange={(e) => setSelectedStatus(e.target.value)}
                 >
-                  <MenuItem value="all">Tous les statuts</MenuItem>
-                  <MenuItem value="active">Actifs seulement</MenuItem>
-                  <MenuItem value="inactive">Inactifs seulement</MenuItem>
+                  <MenuItem value="all">Tous</MenuItem>
+                  <MenuItem value="active">Actifs</MenuItem>
+                  <MenuItem value="inactive">Inactifs</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
             
             <Grid item xs={12} md={2}>
-              <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                <Button
-                  onClick={fetchData}
-                  variant="outlined"
-                  fullWidth
-                >
-                  Actualiser
-                </Button>
-              </Box>
+              <Button
+                onClick={fetchData}
+                variant="outlined"
+                fullWidth
+                size="small"
+              >
+                Actualiser
+              </Button>
             </Grid>
           </Grid>
         </Paper>
@@ -330,76 +354,74 @@ const StudentsList = () => {
 
       {isMobile ? (
         <Grid container spacing={2}>
-          {filteredStudents.map((student) => (
-            <Grid item xs={12} key={student.id}>
-              <Card>
-                <CardContent>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                      <Avatar src={student.photo} sx={{ bgcolor: 'secondary.main' }}>
-                        {student.firstName?.[0]}{student.lastName?.[0]}
-                      </Avatar>
-                      <Box>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                          {student.firstName} {student.lastName}
-                        </Typography>
-                        <Typography variant="caption" color="textSecondary">
-                          {student.matricule}
-                        </Typography>
+          {filteredStudents.map((student) => {
+            const isActive = student.user?.isActive ?? student.user?.is_active ?? false;
+            return (
+              <Grid item xs={12} key={student.id}>
+                <Card>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <Avatar src={student.photo} sx={{ bgcolor: 'secondary.main', width: 48, height: 48 }}>
+                          {student.firstName?.[0]}{student.lastName?.[0]}
+                        </Avatar>
+                        <Box>
+                          <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                            {student.firstName} {student.lastName}
+                          </Typography>
+                          <Typography variant="caption" color="textSecondary">
+                            {student.matricule}
+                          </Typography>
+                        </Box>
                       </Box>
+                      <Switch
+                        checked={isActive}
+                        onChange={() => handleToggleStatus(student)}
+                        color="success"
+                        size="small"
+                      />
                     </Box>
-                    <Chip
-                      label={student.user?.isActive ? 'Actif' : 'Inactif'}
-                      color={student.user?.isActive ? 'success' : 'error'}
-                      size="small"
-                    />
-                  </Box>
-                  
-                  <Box sx={{ mb: 2 }}>
-                    <Typography variant="body2" gutterBottom>
-                      <strong>Classe:</strong> {getClassName(student)}
-                    </Typography>
-                    {student.parentName && (
+                    
+                    <Box sx={{ mb: 2 }}>
                       <Typography variant="body2" gutterBottom>
-                        <strong>Parent:</strong> {student.parentName}
+                        <strong>Classe:</strong> {getClassName(student)}
                       </Typography>
-                    )}
-                    {student.birthDate && (
-                      <Typography variant="body2">
-                        <strong>Naissance:</strong> {new Date(student.birthDate).toLocaleDateString('fr-FR')}
-                      </Typography>
-                    )}
-                  </Box>
+                      {student.parentName && (
+                        <Typography variant="body2" gutterBottom>
+                          <strong>Parent:</strong> {student.parentName}
+                        </Typography>
+                      )}
+                      {student.birthDate && (
+                        <Typography variant="body2">
+                          <strong>Naissance:</strong> {new Date(student.birthDate).toLocaleDateString('fr-FR')}
+                        </Typography>
+                      )}
+                    </Box>
 
-                  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between' }}>
-                    <Button
-                      size="small"
-                      startIcon={<VisibilityIcon />}
-                      onClick={() => handleView(student)}
-                    >
-                      Voir
-                    </Button>
-                    <Button
-                      size="small"
-                      startIcon={<EditIcon />}
-                      onClick={() => handleEdit(student)}
-                      color="primary"
-                    >
-                      Modifier
-                    </Button>
-                    <Button
-                      size="small"
-                      startIcon={<DeleteIcon />}
-                      onClick={() => handleDelete(student)}
-                      color="error"
-                    >
-                      Supprimer
-                    </Button>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-          ))}
+                    <Box sx={{ display: 'flex', gap: 1, justifyContent: 'space-between', mt: 2 }}>
+                      <Button
+                        size="small"
+                        startIcon={<VisibilityIcon />}
+                        onClick={() => handleView(student)}
+                        variant="outlined"
+                      >
+                        Voir
+                      </Button>
+                      <Button
+                        size="small"
+                        startIcon={<EditIcon />}
+                        onClick={() => handleEdit(student)}
+                        color="primary"
+                        variant="contained"
+                      >
+                        Modifier
+                      </Button>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            );
+          })}
         </Grid>
       ) : (
         <DataTable
@@ -413,7 +435,6 @@ const StudentsList = () => {
         />
       )}
 
-      {/* Dialog de confirmation de suppression */}
       <Dialog
         open={Boolean(deleteDialog)}
         onClose={() => setDeleteDialog(null)}
